@@ -367,7 +367,7 @@
     <h1 id="viewTitle">Drill Library</h1>
     <div style="display:flex; align-items:center; gap:8px;">
       <button id="signInBtn" style="display:none; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.25); color:#fff; font-size:11px; font-family: var(--font-body); font-weight:600; padding:5px 10px; border-radius:8px; cursor:pointer;">Sign in</button>
-      <span id="syncDot" title="Local only" style="width:9px; height:9px; border-radius:50%; background:#8A9A91; flex-shrink:0;"></span>
+      <span id="syncDot" title="Local only" style="width:9px; height:9px; border-radius:50%; background:#8A9A91; flex-shrink:0; cursor:pointer;"></span>
       <div class="count-pill" id="countPill">0 drills</div>
     </div>
   </div>
@@ -804,7 +804,12 @@ async function sheetsPullAll(){
     const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A2:B1000`, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
-    if(!res.ok) return null;
+    if(!res.ok){
+      const errBody = await res.json().catch(()=>({}));
+      const msg = (errBody.error && errBody.error.message) || `HTTP ${res.status}`;
+      showToast('Sync read failed: ' + msg);
+      return null;
+    }
     const data = await res.json();
     const rows = data.values || [];
     const result = {};
@@ -815,7 +820,7 @@ async function sheetsPullAll(){
       if(key){ result[key] = value; rowMap[key] = i + 2; }
     });
     return result;
-  }catch(e){ return null; }
+  }catch(e){ showToast('Sync read failed: ' + e.message); return null; }
 }
 
 async function pushKey(key, value){
@@ -823,19 +828,29 @@ async function pushKey(key, value){
   if(!sheetsConfigured() || !accessToken){ return; }
   setSyncStatus('pending');
   try{
+    let res;
     if(rowMap[key]){
       const row = rowMap[key];
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!B${row}?valueInputOption=RAW`, {
+      res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!B${row}?valueInputOption=RAW`, {
         method:'PUT',
         headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
         body: JSON.stringify({ values: [[value]] })
       });
     } else {
-      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A:B:append?valueInputOption=RAW`, {
+      res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A:B:append?valueInputOption=RAW`, {
         method:'POST',
         headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
         body: JSON.stringify({ values: [[key, value]] })
       });
+    }
+    if(!res.ok){
+      const errBody = await res.json().catch(()=>({}));
+      const msg = (errBody.error && errBody.error.message) || `HTTP ${res.status}`;
+      showToast('Sync write failed: ' + msg);
+      setSyncStatus('error');
+      return;
+    }
+    if(!rowMap[key]){
       const data = await res.json();
       const updatedRange = (data.updates && data.updates.updatedRange) || '';
       const m = updatedRange.match(/![A-Z]+(\d+)/);
@@ -844,6 +859,7 @@ async function pushKey(key, value){
     clearPending(key);
     setSyncStatus(pendingSync.size ? 'pending' : 'ok');
   }catch(e){
+    showToast('Sync write failed: ' + e.message);
     setSyncStatus('error');
   }
 }
@@ -1807,6 +1823,15 @@ function init(){
   document.getElementById('gameDate').value = todayISO();
   render();
 }
+document.getElementById('syncDot').onclick = async () => {
+  if(!sheetsConfigured()){ showToast('Team sync not configured'); return; }
+  if(!accessToken){ showToast('Sign in first'); return; }
+  SYNC_KEYS.forEach(k => { if(localStorage.getItem(k) !== null) markPending(k); });
+  showToast('Resyncing…');
+  await flushPending();
+  if(pendingSync.size === 0) showToast('Resync complete');
+};
+
 init();
 </script>
 </body>
