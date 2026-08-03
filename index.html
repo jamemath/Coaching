@@ -428,6 +428,11 @@
 
   <h3>Drills selected (<span id="sessionDrillCount">0</span>)</h3>
   <div id="sessionDrillList"></div>
+  <div class="add-player-row">
+    <input type="text" id="quickDrillName" placeholder="Quick drill — name / overview…">
+    <button id="addQuickDrillBtn">Add</button>
+  </div>
+  <div class="hint">For one-off drills that aren't in the library — just a name, with optional notes once added.</div>
 
   <h3>Attendance</h3>
   <div class="attend-actions">
@@ -733,6 +738,7 @@ let activeTab = 'drills';
 let currentAttendance = [];
 let currentTrainer = '';
 let currentLeadCoach = '';
+let currentQuickDrills = [];
 let currentGamePlayers = [];
 let currentGameScorers = {};
 let currentGamePOTM = '';
@@ -1434,24 +1440,45 @@ function renderSessionPanel(){
   });
 
   const queued = drills.filter(d=>d.inSession);
-  document.getElementById('sessionDrillCount').textContent = queued.length;
+  document.getElementById('sessionDrillCount').textContent = queued.length + currentQuickDrills.length;
   const listEl = document.getElementById('sessionDrillList');
-  if(queued.length === 0){
-    listEl.innerHTML = `<div class="hint">No drills queued yet — go to the Drills tab and tick "This week" on the ones you're using.</div>`;
+  let listHtml = '';
+  if(queued.length === 0 && currentQuickDrills.length === 0){
+    listHtml = `<div class="hint">No drills queued yet — tick "This week" on library drills, or add a quick one below.</div>`;
   } else {
-    listEl.innerHTML = queued.map(d => `
+    listHtml += queued.map(d => `
       <div class="session-drill-item" data-id="${d.id}">
         <span class="sdi-name">${escapeHtml(d.name)}</span>
         <button class="sdi-remove" data-id="${d.id}" title="Remove">✕</button>
       </div>
     `).join('');
-    listEl.querySelectorAll('.sdi-remove').forEach(btn=>{
-      btn.onclick = () => {
-        const dr = drills.find(x=>x.id===btn.dataset.id);
-        if(dr){ dr.inSession = false; persist(); renderSessionPanel(); updateSessionBadge(); }
-      };
-    });
+    listHtml += currentQuickDrills.map((q, i) => `
+      <div class="session-drill-item" style="flex-wrap:wrap;">
+        <span class="sdi-name">⚡ ${escapeHtml(q.name)}</span>
+        <button class="qd-remove" data-idx="${i}" title="Remove">✕</button>
+        <textarea class="qd-notes" data-idx="${i}" placeholder="Notes (optional)…" style="width:100%; margin-top:6px; min-height:44px; border-radius:8px; border:1.5px solid var(--chalk-line); padding:7px 9px; font-family: var(--font-body); font-size:13px; background: var(--chalk); resize:vertical; outline:none;">${escapeHtml(q.notes||'')}</textarea>
+      </div>
+    `).join('');
   }
+  listEl.innerHTML = listHtml;
+  listEl.querySelectorAll('.sdi-remove').forEach(btn=>{
+    btn.onclick = () => {
+      const dr = drills.find(x=>x.id===btn.dataset.id);
+      if(dr){ dr.inSession = false; persist(); renderSessionPanel(); updateSessionBadge(); }
+    };
+  });
+  listEl.querySelectorAll('.qd-remove').forEach(btn=>{
+    btn.onclick = () => {
+      currentQuickDrills.splice(parseInt(btn.dataset.idx,10), 1);
+      renderSessionPanel();
+    };
+  });
+  listEl.querySelectorAll('.qd-notes').forEach(ta=>{
+    ta.addEventListener('input', () => {
+      const q = currentQuickDrills[parseInt(ta.dataset.idx,10)];
+      if(q) q.notes = ta.value;
+    });
+  });
 
   const attendWrap = document.getElementById('attendanceList');
   attendWrap.innerHTML = `<div class="attend-list">` + players.map(p => {
@@ -1480,6 +1507,15 @@ document.getElementById('attendNoneBtn').onclick = () => { currentAttendance = [
 document.getElementById('trainerSelect').onchange = (e) => { currentTrainer = e.target.value; };
 document.getElementById('leadCoachSelect').onchange = (e) => { currentLeadCoach = e.target.value; };
 
+document.getElementById('addQuickDrillBtn').onclick = () => {
+  const input = document.getElementById('quickDrillName');
+  const name = input.value.trim();
+  if(!name) return;
+  currentQuickDrills.push({ name, notes: '' });
+  input.value = '';
+  renderSessionPanel();
+};
+
 document.getElementById('addCoachBtn').onclick = () => {
   const input = document.getElementById('newCoachName');
   const name = input.value.trim();
@@ -1506,7 +1542,7 @@ document.getElementById('addPlayerBtn').onclick = () => {
 
 document.getElementById('saveSessionBtn').onclick = () => {
   const queued = drills.filter(d=>d.inSession);
-  if(queued.length === 0 && currentAttendance.length === 0){
+  if(queued.length === 0 && currentQuickDrills.length === 0 && currentAttendance.length === 0){
     showToast('Add some drills or attendance first');
     return;
   }
@@ -1516,6 +1552,7 @@ document.getElementById('saveSessionBtn').onclick = () => {
     title: document.getElementById('sessionTitle').value.trim(),
     leadCoach: currentLeadCoach || null,
     drillIds: queued.map(d=>d.id),
+    quickDrills: currentQuickDrills.map(q => ({ name:q.name, notes:(q.notes||'').trim() })),
     attendance: currentAttendance.slice(),
     trainerOfWeek: currentTrainer || null,
     notes: document.getElementById('sessionNotes').value.trim()
@@ -1528,6 +1565,7 @@ document.getElementById('saveSessionBtn').onclick = () => {
   currentAttendance = [];
   currentTrainer = '';
   currentLeadCoach = '';
+  currentQuickDrills = [];
   document.getElementById('sessionNotes').value = '';
   document.getElementById('sessionTitle').value = '';
   document.getElementById('sessionDate').value = todayISO();
@@ -1817,6 +1855,8 @@ function renderHistory(){
   const sorted = sessions.slice().sort((a,b)=> b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   wrap.innerHTML = sorted.map(s => {
     const drillNames = s.drillIds.map(id => { const d = drills.find(x=>x.id===id); return d ? d.name : null; }).filter(Boolean);
+    const quick = (s.quickDrills || []);
+    const allDrillText = drillNames.concat(quick.map(q => '⚡ ' + q.name + (q.notes ? ` (${q.notes})` : ''))).join(', ');
     return `
       <div class="history-card" data-id="${s.id}">
         <div class="hc-top">
@@ -1829,7 +1869,7 @@ function renderHistory(){
           </button>
         </div>
         <div class="hc-row"><b>Lead coach:</b> ${s.leadCoach ? escapeHtml(s.leadCoach) : '—'}</div>
-        <div class="hc-row"><b>Drills:</b> ${drillNames.length ? escapeHtml(drillNames.join(', ')) : '—'}</div>
+        <div class="hc-row"><b>Drills:</b> ${allDrillText ? escapeHtml(allDrillText) : '—'}</div>
         <div class="hc-row"><b>Attendance:</b> ${s.attendance.length} player${s.attendance.length===1?'':'s'}${s.attendance.length ? ' — '+escapeHtml(s.attendance.join(', ')) : ''}</div>
         <div class="hc-row"><b>Trainer of the Week:</b> ${s.trainerOfWeek ? escapeHtml(s.trainerOfWeek) : '—'}</div>
         ${s.notes ? `<div class="hc-notes">${escapeHtml(s.notes)}</div>` : ''}
