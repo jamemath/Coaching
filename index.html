@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Drills">
+<meta name="theme-color" content="#123C27">
+<title>CoachLog · Drill Library</title>
+<style>
+  :root{
+    --pitch-dark:#0B2818;
+    --pitch:#123C27;
+    --pitch-mid:#1B5E3C;
+    --pitch-light:#2E7D52;
+    --chalk:#F6FAF7;
+    --chalk-line:#E2ECE5;
+    --gold:#F2C744;
+    --gold-dark:#C9A227;
+    --red:#D6473F;
+    --ink:#0F2318;
+    --ink-soft:#5B6E64;
+    --card-bg:#FFFFFF;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --font-display: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{margin:0; padding:0; height:100%;}
+  body{
+    font-family: var(--font-body);
+    background: var(--chalk);
+    color: var(--ink);
+    overscroll-behavior-y: none;
+  }
+  .stripes{
+    position:fixed; inset:0; z-index:-1; opacity:0.05;
+    background: repeating-linear-gradient(90deg, var(--pitch) 0 60px, var(--pitch-light) 60px 120px);
+  }
+
+  header{
+    position:sticky; top:0; z-index:20;
+    background: linear-gradient(180deg, var(--pitch-dark), var(--pitch));
+    padding: calc(14px + var(--safe-top)) 16px 12px;
+    color:#fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+  }
+  .titlebar{
+    display:flex; align-items:baseline; justify-content:space-between;
+    margin-bottom:12px;
+  }
+  .titlebar h1{
+    font-family: var(--font-display); font-weight:700; letter-spacing:0.5px;
+    font-size:22px; margin:0; text-transform:uppercase;
+  }
+  .titlebar .count-pill{
+    font-family: var(--font-display); font-size:12px; font-weight:600;
+    background: rgba(255,255,255,0.12); color:#fff;
+    padding:4px 10px; border-radius:20px; letter-spacing:0.5px;
+  }
+  .search-row{
+    display:flex; gap:8px;
+  }
+  .search-box{
+    flex:1; display:flex; align-items:center; gap:8px;
+    background: rgba(255,255,255,0.1);
+    border:1px solid rgba(255,255,255,0.16);
+    border-radius:10px; padding:9px 12px;
+  }
+  .search-box input{
+    background:none; border:none; outline:none; color:#fff;
+    font-family: var(--font-body); font-size:15px; width:100%;
+  }
+  .search-box input::placeholder{ color: rgba(255,255,255,0.55); }
+  .search-box svg{ flex-shrink:0; opacity:0.7; }
+  .icon-btn{
+    width:38px; height:38px; border-radius:10px; border:1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.1); color:#fff; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; cursor:pointer;
+  }
+  .icon-btn:active{ background: rgba(255,255,255,0.2); }
+
+  .chips{
+    display:flex; gap:8px; overflow-x:auto; padding: 12px 16px 4px;
+    -webkit-overflow-scrolling:touch; scrollbar-width:none;
+  }
+  .chips::-webkit-scrollbar{ display:none; }
+  .chip{
+    flex-shrink:0; display:flex; align-items:center; gap:6px;
+    font-family: var(--font-display); font-size:13px; font-weight:500; letter-spacing:0.3px;
+    padding:7px 13px; border-radius:20px; background:#fff; border:1px solid var(--chalk-line);
+    color: var(--ink-soft); cursor:pointer; white-space:nowrap;
+  }
+  .chip .dot{ width:8px; height:8px; border-radius:50%; }
+  .chip.active{
+    background: var(--pitch-mid); border-color: var(--pitch-mid); color:#fff;
+  }
+  .chip .n{ opacity:0.65; font-size:11px; }
+
+  main{ padding: 8px 16px 100px; }
+  .empty{
+    text-align:center; padding: 60px 20px; color: var(--ink-soft);
+  }
+  .empty h3{ font-family: var(--font-display); color: var(--ink); margin-bottom:6px; }
+
+  .card{
+    background: var(--card-bg); border:1px solid var(--chalk-line);
+    border-radius:14px; padding:10px 10px 10px 12px; margin-bottom:10px;
+  }
+  .card.card-used{ border-left:4px solid var(--pitch-mid); }
+  .card-top{ display:flex; align-items:center; gap:12px; }
+  .badge{
+    flex-shrink:0; width:40px; height:40px; border-radius:10px;
+    background: linear-gradient(160deg, var(--pitch-mid), var(--pitch));
+    color:#fff; font-family: var(--font-display); font-weight:700; font-size:15px;
+    display:flex; align-items:center; justify-content:center;
+    border: 2px solid rgba(255,255,255,0.5);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15);
+  }
+  .card-main{ flex:1; min-width:0; cursor:pointer; }
+  .card-main .name{
+    font-weight:600; font-size:15px; line-height:1.3;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .card-main .meta{
+    display:flex; align-items:center; gap:6px; margin-top:3px;
+  }
+  .cat-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .card-main .cat-label{ font-size:12px; color: var(--ink-soft); }
+  .card-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .card-actions button{
+    width:32px; height:32px; border-radius:8px; border:1px solid var(--chalk-line);
+    background: var(--chalk); display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .card-actions button:active{ background: var(--chalk-line); }
+  .card-actions .del{ color: var(--red); }
+
+  .seg-row{ display:flex; gap:8px; padding: 2px 16px 10px; }
+  .seg{ flex:1; display:flex; background:#fff; border:1px solid var(--chalk-line); border-radius:10px; overflow:hidden; }
+  .seg button{
+    flex:1; border:none; background:none; padding:8px 6px; font-family: var(--font-display); font-size:12px; font-weight:600;
+    color: var(--ink-soft); cursor:pointer; letter-spacing:0.3px;
+  }
+  .seg button.active{ background: var(--pitch-mid); color:#fff; }
+
+  .log-row{
+    display:flex; align-items:center; gap:10px; margin-top:8px; padding-top:8px;
+    border-top:1px dashed var(--chalk-line); flex-wrap:wrap;
+  }
+  .used-toggle{ display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .used-toggle input{ width:18px; height:18px; accent-color: var(--pitch-mid); }
+  .used-toggle span{ font-size:12.5px; color: var(--ink-soft); font-weight:500; }
+  .well-btns{ display:flex; gap:4px; margin-left:auto; }
+  .well-btns button{
+    width:30px; height:30px; border-radius:8px; border:1px solid var(--chalk-line); background: var(--chalk);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:14px;
+  }
+  .well-btns button.active-good{ background:#DFF3E6; border-color:#2E7D52; }
+  .well-btns button.active-meh{ background:#FBEAE8; border-color: var(--red); }
+  .notes-btn{
+    width:30px; height:30px; border-radius:8px; border:1px solid var(--chalk-line); background: var(--chalk);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color: var(--ink-soft);
+  }
+  .notes-btn.has-notes{ background: var(--gold); border-color: var(--gold-dark); color: var(--pitch-dark); }
+  .notes-box{ width:100%; margin-top:8px; }
+  .notes-box textarea{
+    width:100%; min-height:60px; border-radius:8px; border:1.5px solid var(--chalk-line); padding:8px 10px;
+    font-family: var(--font-body); font-size:13.5px; outline:none; background: var(--chalk); resize:vertical;
+  }
+  .notes-box textarea:focus{ border-color: var(--pitch-mid); }
+
+  .confirm-row{
+    display:flex; align-items:center; gap:8px; width:100%;
+  }
+  .confirm-row span{ font-size:13px; color: var(--ink-soft); flex:1; }
+  .confirm-row button{
+    font-family: var(--font-body); font-weight:600; font-size:13px; padding:7px 12px; border-radius:8px; border:none; cursor:pointer;
+  }
+  .confirm-row .yes{ background: var(--red); color:#fff; }
+  .confirm-row .no{ background: var(--chalk-line); color: var(--ink); }
+
+  .fab{
+    position:fixed; right:18px; bottom: calc(20px + var(--safe-bottom));
+    width:58px; height:58px; border-radius:50%;
+    background: var(--gold); color: var(--pitch-dark);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.25); border:none; cursor:pointer; z-index:15;
+  }
+  .fab:active{ background: var(--gold-dark); }
+
+  .sheet-backdrop{
+    position:fixed; inset:0; background: rgba(6,20,12,0.5); z-index:30;
+    display:none; align-items:flex-end;
+  }
+  .sheet-backdrop.open{ display:flex; }
+  .sheet{
+    background:#fff; width:100%; border-radius:20px 20px 0 0;
+    padding: 18px 18px calc(18px + var(--safe-bottom));
+    max-height: 88vh; overflow-y:auto;
+    animation: slideUp 0.22s ease-out;
+  }
+  @keyframes slideUp{ from{ transform: translateY(30px); opacity:0; } to{ transform: translateY(0); opacity:1; } }
+  .sheet-handle{ width:36px; height:4px; background: var(--chalk-line); border-radius:3px; margin: 0 auto 14px; }
+  .sheet h2{ font-family: var(--font-display); text-transform:uppercase; font-size:17px; margin: 0 0 14px; color: var(--pitch-dark); }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:12px; font-weight:600; color: var(--ink-soft); margin-bottom:5px; text-transform:uppercase; letter-spacing:0.4px; }
+  .field input, .field select, .field textarea{
+    width:100%; padding:11px 12px; border-radius:10px; border:1.5px solid var(--chalk-line);
+    font-family: var(--font-body); font-size:15px; outline:none; background: var(--chalk);
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{ border-color: var(--pitch-mid); }
+  .field textarea{ min-height:140px; resize:vertical; font-family: ui-monospace, monospace; font-size:13px; line-height:1.5; }
+  .hint{ font-size:12px; color: var(--ink-soft); margin-top:6px; line-height:1.4; }
+  .sheet-actions{ display:flex; gap:10px; margin-top:6px; }
+  .btn{
+    flex:1; padding:13px; border-radius:11px; border:none; cursor:pointer;
+    font-family: var(--font-body); font-weight:600; font-size:15px;
+  }
+  .btn-primary{ background: var(--pitch-mid); color:#fff; }
+  .btn-primary:active{ background: var(--pitch); }
+  .btn-ghost{ background: var(--chalk-line); color: var(--ink); }
+  .btn-danger{ background:#fff; color: var(--red); border:1.5px solid var(--red); }
+
+  .toast{
+    position:fixed; top: calc(10px + var(--safe-top)); left:50%; transform: translateX(-50%);
+    background: var(--pitch-dark); color:#fff; padding:10px 18px; border-radius:30px;
+    font-size:13px; font-weight:500; z-index:50; opacity:0; pointer-events:none;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  .toast.show{ opacity:1; transform: translateX(-50%) translateY(6px); }
+</style>
+</head>
+<body>
+<div class="stripes"></div>
+
+<header>
+  <div class="titlebar">
+    <h1>Drill Library</h1>
+    <div class="count-pill" id="countPill">0 drills</div>
+  </div>
+  <div class="search-row">
+    <div class="search-box">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="searchInput" type="text" placeholder="Search drills…">
+    </div>
+    <button class="icon-btn" id="importBtn" title="Bulk import">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="chips" id="chipRow"></div>
+<div class="seg-row">
+  <div class="seg" id="usedSeg">
+    <button data-val="all" class="active">All</button>
+    <button data-val="unused">Not used</button>
+    <button data-val="used">Used</button>
+  </div>
+</div>
+
+<main id="listContainer"></main>
+
+<button class="fab" id="addFab" title="Add drill">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+</button>
+
+<!-- Add / Edit sheet -->
+<div class="sheet-backdrop" id="editBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="editTitle">Add Drill</h2>
+    <div class="field">
+      <label>Name</label>
+      <input id="fName" type="text" placeholder="e.g. Rondo 4v2">
+    </div>
+    <div class="field">
+      <label>Category</label>
+      <select id="fCategory"></select>
+    </div>
+    <div class="field">
+      <label>Video link</label>
+      <input id="fUrl" type="url" placeholder="https://facebook.com/…">
+    </div>
+    <input type="hidden" id="fId">
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="editCancel">Cancel</button>
+      <button class="btn btn-primary" id="editSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk import sheet -->
+<div class="sheet-backdrop" id="importBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>Bulk Add</h2>
+    <div class="field">
+      <label>Default category (used if pasted text has no ## headings)</label>
+      <select id="importCategory"></select>
+    </div>
+    <div class="field">
+      <label>Paste list</label>
+      <textarea id="importText" placeholder="## Warm-Ups
+- Passing square — https://facebook.com/share/...
+- England warm up — https://facebook.com/share/...
+
+## Finishing &amp; Shooting
+- Quick finishing — https://facebook.com/share/..."></textarea>
+      <div class="hint">Paste lines like "- Name — link". Add a "## Category" line above a group to file everything under it, or leave headings out and use the dropdown above instead.</div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="importCancel">Cancel</button>
+      <button class="btn btn-primary" id="importSave">Add All</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CATEGORIES = [
+  { key:'warmups', label:'Warm-Ups', color:'#F2C744' },
+  { key:'passing', label:'Passing & Possession', color:'#2E7D52' },
+  { key:'defending', label:'1v1 & Defending', color:'#3B5BA5' },
+  { key:'smallsided', label:'Small-Sided Games & Rondos', color:'#2FA6A0' },
+  { key:'finishing', label:'Finishing & Shooting', color:'#D6473F' },
+  { key:'wingplay', label:'Wing Play & Crossing', color:'#8A5CC4' },
+  { key:'movement', label:'Movement Off the Ball', color:'#C77A2E' },
+  { key:'other', label:'Other', color:'#8A9A91' },
+];
+const catByLabelLower = {};
+CATEGORIES.forEach(c => catByLabelLower[c.label.toLowerCase()] = c.key);
+// a few loose aliases for heading matching during import
+const ALIASES = {
+  'warm ups':'warmups','warm-up':'warmups','warmup':'warmups','warmups':'warmups',
+  'passing':'passing','passing & possession':'passing','possession':'passing','passing and possession':'passing',
+  '1v1':'defending','defending':'defending','1v1 & defending':'defending','1v1 and defending':'defending',
+  'small sided':'smallsided','small-sided games':'smallsided','small-sided games & rondos':'smallsided','rondos':'smallsided',
+  'finishing':'finishing','shooting':'finishing','finishing & shooting':'finishing',
+  'wing play':'wingplay','wing play & crossing':'wingplay','crossing':'wingplay',
+  'movement':'movement','movement off the ball':'movement','off the ball':'movement','off ball':'movement',
+};
+
+function catInfo(key){ return CATEGORIES.find(c=>c.key===key) || CATEGORIES[CATEGORIES.length-1]; }
+
+const SEED = [
+  // Warm-Ups
+  ['Passing square','warmups','https://www.facebook.com/share/r/1GRMG5GDxf/?mibextid=wwXIfr'],
+  ['England warm up','warmups','https://www.facebook.com/share/r/1ETotyJyq4/?mibextid=wwXIfr'],
+  ['Warm up (rotate)','warmups','https://www.facebook.com/share/v/1FLMuRiqvy/?mibextid=wwXIfr'],
+  ['Fun warm up rotate','warmups','https://www.facebook.com/share/v/1WzCDq3a7R/?mibextid=wwXIfr'],
+  ['Warm up: control, shuttle runs, shot','warmups','https://www.facebook.com/share/r/1DxMwoxRed/?mibextid=wwXIfr'],
+  ['Square passing, first touch bounce','warmups','https://www.facebook.com/share/r/19ywEtbBQB/?mibextid=wwXIfr'],
+  ['Bounce pass warm up','warmups','https://www.facebook.com/share/r/173cSpRTYZ/?mibextid=wwXIfr'],
+  ['Passing warm up','warmups','https://www.facebook.com/share/v/1M5wstybnc/?mibextid=wwXIfr'],
+  // Passing & Possession
+  ['Control, pass and run (1-2s)','passing','https://www.facebook.com/share/r/1BokdQm2qZ/?mibextid=wwXIfr'],
+  ['Box pass out','passing','https://www.facebook.com/share/r/1HJBxQtaYE/?mibextid=wwXIfr'],
+  ['Pass, run, move','passing','https://www.facebook.com/share/v/1D1SBu7F3v/?mibextid=wwXIfr'],
+  ['Scanning pass','passing','https://www.facebook.com/share/r/1Autezk5oZ/?mibextid=wwXIfr'],
+  ['Simple scanning','passing','https://www.facebook.com/share/r/1Af8LT8NqZ/?mibextid=wwXIfr'],
+  ['Fast one-touch pass','passing','https://www.facebook.com/share/r/18g6t4vfeU/?mibextid=wwXIfr'],
+  ['Receive, play back, round cone (3-player)','passing','https://www.facebook.com/share/r/15YzDrWVQf/?mibextid=wwXIfr'],
+  ['Tri-cones, different angle to receive','passing','https://www.facebook.com/share/v/185WaWXtaz/?mibextid=wwXIfr'],
+  ['Receive and control through a cone gate','passing','https://www.facebook.com/share/r/1H8ZqmqBG6/?mibextid=wwXIfr'],
+  ['Left/right/middle 1v1 drive, lay-off, bounce & defend, fast clean pass','passing','https://www.facebook.com/share/r/14kEA8cB45U/?mibextid=wwXIfr'],
+  // 1v1 & Defending
+  ['Long 2-player defending drill / 1v1 attack','defending','https://www.facebook.com/share/r/1ArWqf7fDQ/?mibextid=wwXIfr'],
+  ['2 teams, 1v1 attack v defend','defending','https://www.facebook.com/share/r/14yfehA9Sa/?mibextid=wwXIfr'],
+  ['Defending waves (1v2, 2v2, 3v2)','defending','https://www.facebook.com/share/r/16ydQWK77K/?mibextid=wwXIfr'],
+  ['Slow press','defending','https://www.facebook.com/share/r/1Bxv9ia5F1/?mibextid=wwXIfr'],
+  ['Shield ball','defending','https://www.facebook.com/share/r/16yQ7Xv1BT/?mibextid=wwXIfr'],
+  ['Coned drill, attack v defence','defending','https://www.facebook.com/share/r/15fwR28get/?mibextid=wwXIfr'],
+  ['1v1 crossing','defending','https://www.facebook.com/share/r/1AQ8rCbo7b/?mibextid=wwXIfr'],
+  ['Playing through lines but blocking','defending','https://www.facebook.com/share/v/1EjXxaJzQY/?mibextid=wwXIfr'],
+  ['No escape','defending','https://www.facebook.com/share/r/1AmeVieu2f/?mibextid=wwXIfr'],
+  // Small-Sided Games & Rondos
+  ['4v2 building to 6v4','smallsided','https://www.facebook.com/share/r/1Dr5gj5cSb/?mibextid=wwXIfr'],
+  ['5v2 and 2v5','smallsided','https://www.facebook.com/share/r/1Eq5JFuabv/?mibextid=wwXIfr'],
+  ['2v1 to 3v2','smallsided','https://www.facebook.com/share/r/1Acs4wnhZC/?mibextid=wwXIfr'],
+  ['3v3+2 rondo','smallsided','https://www.facebook.com/share/v/1Fh4MGodKD/?mibextid=wwXIfr'],
+  ["Rondo till out, run round back to position (extra lap for last)",'smallsided','https://www.facebook.com/share/r/1DV2KmsihN/?mibextid=wwXIfr'],
+  ['King pin','smallsided','https://www.facebook.com/share/r/19Fw8dr1Zb/?mibextid=wwXIfr'],
+  ['Sneak tag','smallsided','https://www.facebook.com/share/r/16ZUKj9M8v/?mibextid=wwXIfr'],
+  ['Catch if you can','smallsided','https://www.facebook.com/share/r/19xYzd9Sjm/?mibextid=wwXIfr'],
+  ['Keep in box','smallsided','https://www.facebook.com/share/r/168XQMYc2i/?mibextid=wwXIfr'],
+  ['Fun come knock','smallsided','https://www.facebook.com/share/r/161JZyFubZa/?mibextid=wwXIfr'],
+  // Finishing & Shooting
+  ['Very quick shooting','finishing','https://www.facebook.com/share/v/18ZDeRnKhc/?mibextid=wwXIfr'],
+  ['Stop ball (finishing)','finishing','https://www.facebook.com/share/r/1EEtmtiKMq/?mibextid=wwXIfr'],
+  ['Overlap run and finish','finishing','https://www.facebook.com/share/r/196xpKZZkp/?mibextid=wwXIfr'],
+  ['Overlap and shoot','finishing','https://www.facebook.com/share/r/1BQR1Wm6Rx/?mibextid=wwXIfr'],
+  ['Quick finishing','finishing','https://www.facebook.com/share/r/1MrETip3so/?mibextid=wwXIfr'],
+  ['Lose them, shooting','finishing','https://www.facebook.com/share/r/1bLKWsZfWc/?mibextid=wwXIfr'],
+  ['Fast end-to-end, 1v2 to 3v2','finishing','https://www.facebook.com/share/v/1B6fF3pGd1/?mibextid=wwXIfr'],
+  // Wing Play & Crossing
+  ['Wing work','wingplay','https://www.facebook.com/share/r/1BgotMhY4y/?mibextid=wwXIfr'],
+  ['Corner (simple)','wingplay','https://www.facebook.com/share/r/1HJUfvz7ys/?mibextid=wwXIfr'],
+  // Movement Off the Ball
+  ['Off-ball movement','movement','https://www.facebook.com/share/r/15AQAWty1E/?mibextid=wwXIfr'],
+].map((row,i) => ({ id:'seed-'+i, name:row[0], category:row[1], url:row[2], used:false, wentWell:null, notes:'' }));
+
+let drills = [];
+let activeCategory = 'all';
+let searchTerm = '';
+let usedFilter = 'all';
+
+const listContainer = document.getElementById('listContainer');
+const chipRow = document.getElementById('chipRow');
+const countPill = document.getElementById('countPill');
+const toastEl = document.getElementById('toast');
+
+function showToast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(()=> toastEl.classList.remove('show'), 1600);
+}
+
+function loadDrills(){
+  try{
+    const raw = localStorage.getItem('coachlog_drills');
+    if(raw){
+      drills = JSON.parse(raw).map(d => ({ used:false, wentWell:null, notes:'', ...d }));
+    } else {
+      drills = SEED;
+      persist();
+    }
+  }catch(e){
+    drills = SEED;
+    persist();
+  }
+  render();
+}
+
+function persist(){
+  try{
+    localStorage.setItem('coachlog_drills', JSON.stringify(drills));
+  }catch(e){
+    showToast('Save failed — storage may be full or disabled');
+  }
+}
+
+function buildChips(){
+  chipRow.innerHTML = '';
+  const counts = { all: drills.length };
+  CATEGORIES.forEach(c => counts[c.key] = drills.filter(d=>d.category===c.key).length);
+
+  const allChip = document.createElement('div');
+  allChip.className = 'chip' + (activeCategory==='all' ? ' active' : '');
+  allChip.innerHTML = `All <span class="n">${counts.all}</span>`;
+  allChip.onclick = () => { activeCategory='all'; render(); };
+  chipRow.appendChild(allChip);
+
+  CATEGORIES.forEach(c=>{
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (activeCategory===c.key ? ' active' : '');
+    chip.innerHTML = `<span class="dot" style="background:${c.color}"></span>${c.label} <span class="n">${counts[c.key]||0}</span>`;
+    chip.onclick = () => { activeCategory=c.key; render(); };
+    chipRow.appendChild(chip);
+  });
+}
+
+function render(){
+  buildChips();
+  let filtered = drills.filter(d => activeCategory==='all' || d.category===activeCategory);
+  if(usedFilter==='used') filtered = filtered.filter(d=>d.used);
+  if(usedFilter==='unused') filtered = filtered.filter(d=>!d.used);
+  if(searchTerm.trim()){
+    const t = searchTerm.trim().toLowerCase();
+    filtered = filtered.filter(d => d.name.toLowerCase().includes(t));
+  }
+  countPill.textContent = `${drills.length} drill${drills.length===1?'':'s'}`;
+
+  listContainer.innerHTML = '';
+  if(filtered.length === 0){
+    listContainer.innerHTML = `<div class="empty"><h3>No drills here yet</h3><p>Tap + to add one, or use bulk import to paste a list.</p></div>`;
+    return;
+  }
+
+  // number badges per category, in current filtered+global order
+  const seenCount = {};
+  filtered.forEach(d=>{
+    const info = catInfo(d.category);
+    seenCount[d.category] = (seenCount[d.category]||0) + 1;
+    const badgeNum = drills.filter(x=>x.category===d.category).indexOf(d) + 1;
+
+    const card = document.createElement('div');
+    card.className = 'card' + (d.used ? ' card-used' : '');
+    card.dataset.id = d.id;
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="badge" style="background:linear-gradient(160deg, ${info.color}, ${info.color}CC)">${badgeNum}</div>
+        <div class="card-main">
+          <div class="name">${escapeHtml(d.name)}</div>
+          <div class="meta"><span class="cat-dot" style="background:${info.color}"></span><span class="cat-label">${info.label}</span></div>
+        </div>
+        <div class="card-actions">
+          <button class="edit" title="Edit">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button class="del" title="Delete">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="log-row">
+        <label class="used-toggle">
+          <input type="checkbox" class="used-check" ${d.used ? 'checked' : ''}>
+          <span>Used</span>
+        </label>
+        <div class="well-btns">
+          <button class="thumb-good ${d.wentWell==='good'?'active-good':''}" title="Went well">👍</button>
+          <button class="thumb-meh ${d.wentWell==='meh'?'active-meh':''}" title="Didn't land">👎</button>
+        </div>
+        <button class="notes-btn ${d.notes ? 'has-notes' : ''}" title="Notes">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+        </button>
+      </div>
+      <div class="notes-box" style="display:none;">
+        <textarea placeholder="Notes on how it went…">${escapeHtml(d.notes||'')}</textarea>
+      </div>
+    `;
+    card.querySelector('.card-main').onclick = () => window.open(d.url, '_blank');
+    card.querySelector('.edit').onclick = () => openEdit(d);
+    card.querySelector('.del').onclick = (e) => confirmDelete(d, card);
+
+    card.querySelector('.used-check').addEventListener('change', async (e) => {
+      d.used = e.target.checked;
+      await persist();
+      render();
+    });
+    card.querySelector('.thumb-good').onclick = async () => {
+      d.wentWell = d.wentWell === 'good' ? null : 'good';
+      if(d.wentWell) d.used = true;
+      await persist();
+      render();
+    };
+    card.querySelector('.thumb-meh').onclick = async () => {
+      d.wentWell = d.wentWell === 'meh' ? null : 'meh';
+      if(d.wentWell) d.used = true;
+      await persist();
+      render();
+    };
+    const notesBox = card.querySelector('.notes-box');
+    card.querySelector('.notes-btn').onclick = () => {
+      notesBox.style.display = notesBox.style.display === 'none' ? 'block' : 'none';
+      if(notesBox.style.display === 'block') notesBox.querySelector('textarea').focus();
+    };
+    let notesTimer;
+    notesBox.querySelector('textarea').addEventListener('input', (e) => {
+      d.notes = e.target.value;
+      clearTimeout(notesTimer);
+      notesTimer = setTimeout(() => { persist(); }, 500);
+    });
+    notesBox.querySelector('textarea').addEventListener('blur', async () => {
+      await persist();
+      render();
+    });
+    listContainer.appendChild(card);
+  });
+}
+
+function confirmDelete(d, card){
+  const actions = card.querySelector('.card-actions');
+  const original = actions.innerHTML;
+  actions.outerHTML = `<div class="confirm-row"><span>Delete "${escapeHtml(d.name)}"?</span><button class="no">Cancel</button><button class="yes">Delete</button></div>`;
+  const row = listContainer.querySelector(`[data-id="${d.id}"] .confirm-row`);
+  row.querySelector('.no').onclick = () => render();
+  row.querySelector('.yes').onclick = async () => {
+    drills = drills.filter(x => x.id !== d.id);
+    await persist();
+    showToast('Drill deleted');
+    render();
+  };
+}
+
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Search
+document.getElementById('searchInput').addEventListener('input', (e)=>{
+  searchTerm = e.target.value;
+  render();
+});
+
+// Add / edit sheet
+const editBackdrop = document.getElementById('editBackdrop');
+const fName = document.getElementById('fName');
+const fCategory = document.getElementById('fCategory');
+const fUrl = document.getElementById('fUrl');
+const fId = document.getElementById('fId');
+const editTitle = document.getElementById('editTitle');
+
+function populateCategorySelect(sel){
+  sel.innerHTML = CATEGORIES.map(c=>`<option value="${c.key}">${c.label}</option>`).join('');
+}
+populateCategorySelect(fCategory);
+
+function openAdd(){
+  editTitle.textContent = 'Add Drill';
+  fId.value = '';
+  fName.value = '';
+  fCategory.value = CATEGORIES[0].key;
+  fUrl.value = '';
+  editBackdrop.classList.add('open');
+  setTimeout(()=>fName.focus(), 100);
+}
+function openEdit(d){
+  editTitle.textContent = 'Edit Drill';
+  fId.value = d.id;
+  fName.value = d.name;
+  fCategory.value = d.category;
+  fUrl.value = d.url;
+  editBackdrop.classList.add('open');
+}
+document.getElementById('addFab').onclick = openAdd;
+document.getElementById('editCancel').onclick = () => editBackdrop.classList.remove('open');
+editBackdrop.onclick = (e) => { if(e.target === editBackdrop) editBackdrop.classList.remove('open'); };
+
+document.getElementById('editSave').onclick = async () => {
+  const name = fName.value.trim();
+  const url = fUrl.value.trim();
+  if(!name || !url){ showToast('Add a name and a link'); return; }
+  if(fId.value){
+    const d = drills.find(x=>x.id===fId.value);
+    if(d){ d.name=name; d.category=fCategory.value; d.url=url; }
+  } else {
+    drills.push({ id: 'd-'+Date.now()+'-'+Math.floor(Math.random()*1000), name, category: fCategory.value, url, used:false, wentWell:null, notes:'' });
+  }
+  await persist();
+  editBackdrop.classList.remove('open');
+  showToast('Saved');
+  render();
+};
+
+// Bulk import sheet
+const importBackdrop = document.getElementById('importBackdrop');
+const importCategory = document.getElementById('importCategory');
+const importText = document.getElementById('importText');
+populateCategorySelect(importCategory);
+
+document.getElementById('importBtn').onclick = () => {
+  importText.value = '';
+  importBackdrop.classList.add('open');
+};
+document.getElementById('importCancel').onclick = () => importBackdrop.classList.remove('open');
+importBackdrop.onclick = (e) => { if(e.target === importBackdrop) importBackdrop.classList.remove('open'); };
+
+function matchCategoryHeading(line){
+  const clean = line.replace(/^#+\s*/, '').trim().toLowerCase();
+  if(ALIASES[clean]) return ALIASES[clean];
+  // fuzzy contains match
+  for(const key in ALIASES){
+    if(clean.includes(key)) return ALIASES[key];
+  }
+  return null;
+}
+
+function parseImport(text, fallbackCategory){
+  const lines = text.split('\n');
+  let currentCategory = fallbackCategory;
+  const results = [];
+  for(let raw of lines){
+    const line = raw.trim();
+    if(!line) continue;
+    if(line.startsWith('#')){
+      const matched = matchCategoryHeading(line);
+      if(matched) currentCategory = matched;
+      continue;
+    }
+    if(line.startsWith('---')) continue;
+    // strip leading list marker
+    let body = line.replace(/^[-*]\s*/, '');
+    const urlMatch = body.match(/(https?:\/\/\S+)/);
+    if(!urlMatch) continue;
+    const url = urlMatch[1].replace(/[)\]]+$/, '');
+    let name = body.slice(0, urlMatch.index)
+      .replace(/[—–-]\s*$/, '')
+      .replace(/\*+/g, '')
+      .trim();
+    if(!name) name = 'Untitled drill';
+    results.push({ name, category: currentCategory, url });
+  }
+  return results;
+}
+
+document.getElementById('importSave').onclick = async () => {
+  const parsed = parseImport(importText.value, importCategory.value);
+  if(parsed.length === 0){ showToast('No links found to import'); return; }
+  parsed.forEach(p=>{
+    drills.push({ id: 'd-'+Date.now()+'-'+Math.floor(Math.random()*10000), name: p.name, category: p.category, url: p.url, used:false, wentWell:null, notes:'' });
+  });
+  await persist();
+  importBackdrop.classList.remove('open');
+  showToast(`Added ${parsed.length} drill${parsed.length===1?'':'s'}`);
+  render();
+};
+
+document.getElementById('usedSeg').querySelectorAll('button').forEach(btn=>{
+  btn.onclick = () => {
+    usedFilter = btn.dataset.val;
+    document.querySelectorAll('#usedSeg button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    render();
+  };
+});
+
+loadDrills();
+</script>
+</body>
+</html>
