@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Drills">
 <meta name="theme-color" content="#123C27">
 <title>CoachLog · Drill Library</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --pitch-dark:#0B2818;
@@ -300,6 +301,17 @@
   .summary-row .sr-name{ font-size:14px; font-weight:500; }
   .summary-row .sr-val{ font-family: var(--font-display); font-weight:700; color: var(--pitch-mid); font-size:14px; }
 
+  .summary-section{ margin: 18px 0; }
+  .summary-section:first-child{ margin-top:4px; }
+  .summary-toggle{
+    width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px;
+    background:none; border:none; padding:0 0 8px; cursor:pointer; text-align:left;
+    font-family: var(--font-display); text-transform:uppercase; font-size:13px; letter-spacing:0.4px;
+    color: var(--pitch-dark); font-weight:700;
+  }
+  .summary-toggle .chev{ transition: transform 0.15s; color: var(--ink-soft); flex-shrink:0; }
+  .summary-toggle .chev.collapsed{ transform: rotate(-90deg); }
+
   .score-row{ display:flex; align-items:flex-end; gap:12px; }
   .score-box{ flex:1; }
   .score-box label{ display:block; font-size:11px; color: var(--ink-soft); margin-bottom:4px; font-weight:600; text-transform:uppercase; }
@@ -353,7 +365,11 @@
 <header>
   <div class="titlebar">
     <h1 id="viewTitle">Drill Library</h1>
-    <div class="count-pill" id="countPill">0 drills</div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <button id="signInBtn" style="display:none; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.25); color:#fff; font-size:11px; font-family: var(--font-body); font-weight:600; padding:5px 10px; border-radius:8px; cursor:pointer;">Sign in</button>
+      <span id="syncDot" title="Local only" style="width:9px; height:9px; border-radius:50%; background:#8A9A91; flex-shrink:0;"></span>
+      <div class="count-pill" id="countPill">0 drills</div>
+    </div>
   </div>
   <div class="search-row" id="searchRowWrap">
     <div class="search-box">
@@ -708,6 +724,138 @@ function showToast(msg){
 
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 
+// ---- Team sync (optional) — Google sign-in + Sheets API ----
+// Fill these in after setup (see instructions). Leave blank to keep
+// this device's data local-only.
+const GOOGLE_CLIENT_ID = '';   // OAuth Client ID from Google Cloud Console
+const SPREADSHEET_ID = '';     // the ID from your Google Sheet's URL
+const SHEET_TAB = 'Data';      // tab name inside that sheet
+
+const SYNC_KEYS = ['coachlog_drills','coachlog_players','coachlog_sessions','coachlog_games','coachlog_docs'];
+let pendingSync = new Set();
+try{ pendingSync = new Set(JSON.parse(localStorage.getItem('coachlog_pending_sync') || '[]')); }catch(e){}
+
+function savePendingSet(){
+  try{ localStorage.setItem('coachlog_pending_sync', JSON.stringify([...pendingSync])); }catch(e){}
+}
+function markPending(key){ pendingSync.add(key); savePendingSet(); }
+function clearPending(key){ pendingSync.delete(key); savePendingSet(); }
+
+function sheetsConfigured(){ return !!(GOOGLE_CLIENT_ID && SPREADSHEET_ID); }
+
+let accessToken = null;
+let rowMap = {}; // data key -> sheet row number
+
+function setSyncStatus(state){
+  const dot = document.getElementById('syncDot');
+  if(!dot) return;
+  const map = {
+    off: ['#8A9A91','Local only — no team sync configured'],
+    signedout: ['#8A9A91','Sign in to sync with the team'],
+    ok: ['#2E7D52','Synced with team data'],
+    pending: ['#F2C744','Changes waiting to sync'],
+    error: ['#D6473F','Could not reach team sync — try signing in again']
+  };
+  const [color, title] = map[state] || map.off;
+  dot.style.background = color;
+  dot.title = title;
+}
+
+function initGoogleAuth(){
+  const btn = document.getElementById('signInBtn');
+  if(!sheetsConfigured()){ setSyncStatus('off'); return; }
+  setSyncStatus('signedout');
+  btn.style.display = 'inline-flex';
+  btn.onclick = () => {
+    const tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/spreadsheets',
+      callback: async (resp) => {
+        if(resp.error){ setSyncStatus('error'); return; }
+        accessToken = resp.access_token;
+        btn.textContent = 'Signed in ✓';
+        await afterSignIn();
+      }
+    });
+    tokenClient.requestAccessToken();
+  };
+}
+
+async function afterSignIn(){
+  await flushPending();
+  const remote = await sheetsPullAll();
+  if(remote){
+    SYNC_KEYS.forEach(k=>{
+      if(remote[k] !== undefined && remote[k] !== null && remote[k] !== '' && !pendingSync.has(k)){
+        localStorage.setItem(k, remote[k]);
+      }
+    });
+    setSyncStatus(pendingSync.size ? 'pending' : 'ok');
+  } else {
+    setSyncStatus('error');
+  }
+  loadDrills(); loadPlayers(); loadSessions(); loadGames(); loadDocs();
+  render();
+}
+
+async function sheetsPullAll(){
+  if(!accessToken) return null;
+  try{
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A2:B1000`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if(!res.ok) return null;
+    const data = await res.json();
+    const rows = data.values || [];
+    const result = {};
+    rowMap = {};
+    rows.forEach((row, i) => {
+      const key = row[0];
+      const value = row[1];
+      if(key){ result[key] = value; rowMap[key] = i + 2; }
+    });
+    return result;
+  }catch(e){ return null; }
+}
+
+async function pushKey(key, value){
+  markPending(key);
+  if(!sheetsConfigured() || !accessToken){ return; }
+  setSyncStatus('pending');
+  try{
+    if(rowMap[key]){
+      const row = rowMap[key];
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!B${row}?valueInputOption=RAW`, {
+        method:'PUT',
+        headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
+        body: JSON.stringify({ values: [[value]] })
+      });
+    } else {
+      const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A:B:append?valueInputOption=RAW`, {
+        method:'POST',
+        headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
+        body: JSON.stringify({ values: [[key, value]] })
+      });
+      const data = await res.json();
+      const updatedRange = (data.updates && data.updates.updatedRange) || '';
+      const m = updatedRange.match(/![A-Z]+(\d+)/);
+      if(m) rowMap[key] = parseInt(m[1], 10);
+    }
+    clearPending(key);
+    setSyncStatus(pendingSync.size ? 'pending' : 'ok');
+  }catch(e){
+    setSyncStatus('error');
+  }
+}
+
+async function flushPending(){
+  if(!sheetsConfigured() || !accessToken || pendingSync.size===0) return;
+  for(const key of [...pendingSync]){
+    const val = localStorage.getItem(key);
+    if(val !== null) await pushKey(key, val);
+  }
+}
+
 function escapeHtml(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -735,7 +883,11 @@ function loadDrills(){
   }
 }
 function persist(){
-  try{ localStorage.setItem('coachlog_drills', JSON.stringify(drills)); }
+  try{
+    const raw = JSON.stringify(drills);
+    localStorage.setItem('coachlog_drills', raw);
+    pushKey('coachlog_drills', raw);
+  }
   catch(e){ showToast('Save failed — storage may be full or disabled'); }
 }
 
@@ -747,7 +899,11 @@ function loadPlayers(){
   }catch(e){ players = ROSTER_SEED.slice(); }
 }
 function persistPlayers(){
-  try{ localStorage.setItem('coachlog_players', JSON.stringify(players)); }
+  try{
+    const raw = JSON.stringify(players);
+    localStorage.setItem('coachlog_players', raw);
+    pushKey('coachlog_players', raw);
+  }
   catch(e){ showToast('Save failed'); }
 }
 
@@ -758,7 +914,11 @@ function loadSessions(){
   }catch(e){ sessions = []; }
 }
 function persistSessions(){
-  try{ localStorage.setItem('coachlog_sessions', JSON.stringify(sessions)); }
+  try{
+    const raw = JSON.stringify(sessions);
+    localStorage.setItem('coachlog_sessions', raw);
+    pushKey('coachlog_sessions', raw);
+  }
   catch(e){ showToast('Save failed'); }
 }
 
@@ -769,7 +929,11 @@ function loadGames(){
   }catch(e){ games = []; }
 }
 function persistGames(){
-  try{ localStorage.setItem('coachlog_games', JSON.stringify(games)); }
+  try{
+    const raw = JSON.stringify(games);
+    localStorage.setItem('coachlog_games', raw);
+    pushKey('coachlog_games', raw);
+  }
   catch(e){ showToast('Save failed'); }
 }
 
@@ -781,7 +945,11 @@ function loadDocs(){
   }catch(e){ docs = DOCS_SEED; persistDocs(); }
 }
 function persistDocs(){
-  try{ localStorage.setItem('coachlog_docs', JSON.stringify(docs)); }
+  try{
+    const raw = JSON.stringify(docs);
+    localStorage.setItem('coachlog_docs', raw);
+    pushKey('coachlog_docs', raw);
+  }
   catch(e){ showToast('Save failed'); }
 }
 
@@ -1550,6 +1718,32 @@ function confirmHistoryDelete(id, cardEl){
 }
 
 // ---- Summary ----
+let summaryCollapsed = {};
+function loadSummaryCollapsed(){
+  try{
+    const raw = localStorage.getItem('coachlog_summary_collapsed');
+    summaryCollapsed = raw ? JSON.parse(raw) : {};
+  }catch(e){ summaryCollapsed = {}; }
+}
+function persistSummaryCollapsed(){
+  try{ localStorage.setItem('coachlog_summary_collapsed', JSON.stringify(summaryCollapsed)); }
+  catch(e){ /* non-critical */ }
+}
+function summarySection(key, title, rowsHtml){
+  const collapsed = !!summaryCollapsed[key];
+  return `
+    <div class="summary-section">
+      <button class="summary-toggle" data-key="${key}">
+        <span>${title}</span>
+        <svg class="chev${collapsed?' collapsed':''}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="summary-table" style="display:${collapsed?'none':'block'}">
+        ${rowsHtml}
+      </div>
+    </div>
+  `;
+}
+
 function renderSummary(){
   const wrap = document.getElementById('summaryContent');
   if(sessions.length === 0 && games.length === 0){
@@ -1565,14 +1759,10 @@ function renderSummary(){
     const totw = players.map(p => ({ name:p, n: sessions.filter(s=>s.trainerOfWeek===p).length }))
       .sort((a,b)=> a.n-b.n || a.name.localeCompare(b.name));
 
-    html += `<h3>Training Attendance (${totalSessions} session${totalSessions===1?'':'s'} logged)</h3>
-      <div class="summary-table">
-        ${attendance.map(a => `<div class="summary-row"><span class="sr-name">${escapeHtml(a.name)}</span><span class="sr-val">${a.n}/${totalSessions}</span></div>`).join('')}
-      </div>
-      <h3>Trainer of the Week — least awarded first</h3>
-      <div class="summary-table">
-        ${totw.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join('')}
-      </div>`;
+    html += summarySection('attendance', `Training Attendance (${totalSessions} session${totalSessions===1?'':'s'} logged)`,
+      attendance.map(a => `<div class="summary-row"><span class="sr-name">${escapeHtml(a.name)}</span><span class="sr-val">${a.n}/${totalSessions}</span></div>`).join(''));
+    html += summarySection('totw', 'Trainer of the Week — least awarded first',
+      totw.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join(''));
   }
 
   if(games.length > 0){
@@ -1585,32 +1775,39 @@ function renderSummary(){
     const potm = players.map(p => ({ name:p, n: games.filter(g=>g.potm===p).length }))
       .sort((a,b)=> a.n-b.n || a.name.localeCompare(b.name));
 
-    html += `<h3>Match Appearances (${totalGames} game${totalGames===1?'':'s'} logged)</h3>
-      <div class="summary-table">
-        ${appearances.map(a => `<div class="summary-row"><span class="sr-name">${escapeHtml(a.name)}</span><span class="sr-val">${a.n}/${totalGames}</span></div>`).join('')}
-      </div>
-      <h3>Goalscorers</h3>
-      <div class="summary-table">
-        ${goals.length ? goals.map(g => `<div class="summary-row"><span class="sr-name">${escapeHtml(g.name)}</span><span class="sr-val">${g.n}</span></div>`).join('') : `<div class="summary-row"><span class="sr-name">No goals logged yet</span></div>`}
-      </div>
-      <h3>Player of the Week — least awarded first</h3>
-      <div class="summary-table">
-        ${potm.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join('')}
-      </div>`;
+    html += summarySection('appearances', `Match Appearances (${totalGames} game${totalGames===1?'':'s'} logged)`,
+      appearances.map(a => `<div class="summary-row"><span class="sr-name">${escapeHtml(a.name)}</span><span class="sr-val">${a.n}/${totalGames}</span></div>`).join(''));
+    html += summarySection('goals', 'Goalscorers',
+      goals.length ? goals.map(g => `<div class="summary-row"><span class="sr-name">${escapeHtml(g.name)}</span><span class="sr-val">${g.n}</span></div>`).join('') : `<div class="summary-row"><span class="sr-name">No goals logged yet</span></div>`);
+    html += summarySection('potm', 'Player of the Week — least awarded first',
+      potm.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join(''));
   }
 
   wrap.innerHTML = html;
+  wrap.querySelectorAll('.summary-toggle').forEach(btn=>{
+    btn.onclick = () => {
+      const key = btn.dataset.key;
+      summaryCollapsed[key] = !summaryCollapsed[key];
+      persistSummaryCollapsed();
+      renderSummary();
+    };
+  });
 }
 
 // ---- Init ----
-loadDrills();
-loadPlayers();
-loadSessions();
-loadGames();
-loadDocs();
-document.getElementById('sessionDate').value = todayISO();
-document.getElementById('gameDate').value = todayISO();
-render();
+function init(){
+  initGoogleAuth();
+  loadDrills();
+  loadPlayers();
+  loadSessions();
+  loadGames();
+  loadDocs();
+  loadSummaryCollapsed();
+  document.getElementById('sessionDate').value = todayISO();
+  document.getElementById('gameDate').value = todayISO();
+  render();
+}
+init();
 </script>
 </body>
 </html>
