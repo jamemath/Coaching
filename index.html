@@ -195,12 +195,12 @@
   .tabbar{
     position:fixed; left:0; right:0; bottom:0; z-index:25;
     display:flex; background:#fff; border-top:1px solid var(--chalk-line);
-    padding: 6px 2px calc(6px + var(--safe-bottom));
+    padding: 6px 0 calc(6px + var(--safe-bottom));
   }
   .tabbar button{
-    flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
-    background:none; border:none; padding:6px 1px; cursor:pointer; color: var(--ink-soft);
-    font-family: var(--font-body); font-size:10px; font-weight:600; position:relative;
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+    background:none; border:none; padding:6px 0; cursor:pointer; color: var(--ink-soft);
+    font-family: var(--font-body); font-size:9.5px; font-weight:600; position:relative;
   }
   .tabbar button.active{ color: var(--pitch-mid); }
   .tab-badge{
@@ -331,6 +331,20 @@
     display:flex; align-items:center; justify-content:center; cursor:pointer;
   }
   .gc-actions .gc-del{ color: var(--red); }
+
+  .doc-card{
+    display:flex; align-items:center; gap:12px;
+    background:#fff; border:1px solid var(--chalk-line); border-radius:14px; padding:12px 12px 12px 14px; margin-bottom:10px;
+  }
+  .doc-card .doc-main{ flex:1; min-width:0; cursor:pointer; }
+  .doc-card .doc-name{ font-weight:600; font-size:15px; line-height:1.3; }
+  .doc-card .doc-url{ font-size:12px; color: var(--ink-soft); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .doc-card .doc-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .doc-card .doc-actions button{
+    width:32px; height:32px; border-radius:8px; border:1px solid var(--chalk-line);
+    background: var(--chalk); display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .doc-card .doc-actions .doc-del{ color: var(--red); }
 </style>
 </head>
 <body>
@@ -452,6 +466,11 @@
   <div id="summaryContent"></div>
 </section>
 
+<section id="tab-documents" class="tab-panel" style="display:none">
+  <div class="hint" style="margin-bottom:12px;">Season admin links — registration, FA player listing, fees. Tap + to add more as the year goes on.</div>
+  <div id="docsList"></div>
+</section>
+
 <button class="fab" id="addFab" title="Add drill">
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
@@ -477,6 +496,10 @@
   <button data-tab="summary">
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     <span>Summary</span>
+  </button>
+  <button data-tab="documents">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+    <span>Docs</span>
   </button>
 </nav>
 
@@ -544,6 +567,27 @@
     <div class="sheet-actions">
       <button class="btn btn-ghost" id="editAllCancel">Cancel</button>
       <button class="btn btn-primary" id="editAllSave">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add / Edit Document sheet -->
+<div class="sheet-backdrop" id="docBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="docTitle">Add Document Link</h2>
+    <div class="field">
+      <label>Name</label>
+      <input id="docName" type="text" placeholder="e.g. Registration Sheet">
+    </div>
+    <div class="field">
+      <label>Link</label>
+      <input id="docUrl" type="url" placeholder="https://…">
+    </div>
+    <input type="hidden" id="docId">
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="docCancel">Cancel</button>
+      <button class="btn btn-primary" id="docSave">Save</button>
     </div>
   </div>
 </div>
@@ -629,10 +673,17 @@ const ROSTER_SEED = [
   'Poppy Mcfarlane','Poppy Jones','Rose Penza','Rosie Hogston','Tamsin Warren','Thea Hutchinson'
 ];
 
+const DOCS_SEED = [
+  ['Registration & Admin Sheet','https://docs.google.com/spreadsheets/d/11Kx0Yqx2ZIh9hWMJKc5WKkxoAjYVMw6_zcR3xRVKa5g/edit#gid=0'],
+  ['FA Player Listing (Clubs Portal)','https://clubs.thefa.com/#/clubs/80104/players/playerlisting/allplayers'],
+  ['Team Fees (TeamFeePay)','https://app.teamfeepay.com/ca/afc-urmston-meadowside/teams/102914'],
+].map((row,i) => ({ id:'doc-seed-'+i, name:row[0], url:row[1] }));
+
 let drills = [];
 let players = [];
 let sessions = [];
 let games = [];
+let docs = [];
 let activeCategory = 'all';
 let searchTerm = '';
 let usedFilter = 'all';
@@ -722,6 +773,18 @@ function persistGames(){
   catch(e){ showToast('Save failed'); }
 }
 
+function loadDocs(){
+  try{
+    const raw = localStorage.getItem('coachlog_docs');
+    if(raw){ docs = JSON.parse(raw); }
+    else { docs = DOCS_SEED; persistDocs(); }
+  }catch(e){ docs = DOCS_SEED; persistDocs(); }
+}
+function persistDocs(){
+  try{ localStorage.setItem('coachlog_docs', JSON.stringify(docs)); }
+  catch(e){ showToast('Save failed'); }
+}
+
 function buildChips(){
   chipRow.innerHTML = '';
   const counts = { all: drills.length };
@@ -748,6 +811,7 @@ function updateCountPill(){
   else if(activeTab==='games') countPill.textContent = `${games.length} game${games.length===1?'':'s'}`;
   else if(activeTab==='history') countPill.textContent = `${sessions.length} session${sessions.length===1?'':'s'}`;
   else if(activeTab==='summary') countPill.textContent = `${players.length} player${players.length===1?'':'s'}`;
+  else if(activeTab==='documents') countPill.textContent = `${docs.length} link${docs.length===1?'':'s'}`;
 }
 
 function updateSessionBadge(){
@@ -917,7 +981,10 @@ function openEdit(d){
   fUrl.value = d.url;
   editBackdrop.classList.add('open');
 }
-document.getElementById('addFab').onclick = openAdd;
+document.getElementById('addFab').onclick = () => {
+  if(activeTab === 'documents') openAddDoc();
+  else openAdd();
+};
 document.getElementById('editCancel').onclick = () => editBackdrop.classList.remove('open');
 editBackdrop.onclick = (e) => { if(e.target === editBackdrop) editBackdrop.classList.remove('open'); };
 
@@ -1052,20 +1119,21 @@ document.getElementById('editAllSave').onclick = () => {
 };
 
 // ---- Tabs ----
-const TAB_TITLES = { drills:'Drill Library', session:"This Week's Session", games:'Match Games', history:'Session History', summary:'Squad Summary' };
+const TAB_TITLES = { drills:'Drill Library', session:"This Week's Session", games:'Match Games', history:'Session History', summary:'Squad Summary', documents:'Season Documents' };
 function switchTab(tab){
   activeTab = tab;
-  ['drills','session','games','history','summary'].forEach(t=>{
+  ['drills','session','games','history','summary','documents'].forEach(t=>{
     document.getElementById('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
   });
   document.getElementById('viewTitle').textContent = TAB_TITLES[tab];
   document.getElementById('searchRowWrap').style.display = tab==='drills' ? 'flex' : 'none';
-  document.getElementById('addFab').style.display = tab==='drills' ? 'flex' : 'none';
+  document.getElementById('addFab').style.display = (tab==='drills' || tab==='documents') ? 'flex' : 'none';
   document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   if(tab==='session') renderSessionPanel();
   if(tab==='games') renderGamesPanel();
   if(tab==='history') renderHistory();
   if(tab==='summary') renderSummary();
+  if(tab==='documents') renderDocs();
   updateCountPill();
 }
 document.querySelectorAll('#tabbar button').forEach(b=>{
@@ -1351,6 +1419,89 @@ function confirmGameDelete(id, cardEl){
   };
 }
 
+// ---- Documents ----
+function renderDocs(){
+  const wrap = document.getElementById('docsList');
+  if(docs.length === 0){
+    wrap.innerHTML = `<div class="empty"><h3>No links yet</h3><p>Tap + to add a season document or admin link.</p></div>`;
+    return;
+  }
+  wrap.innerHTML = docs.map(d => `
+    <div class="doc-card" data-id="${d.id}">
+      <div class="doc-main">
+        <div class="doc-name">${escapeHtml(d.name)}</div>
+        <div class="doc-url">${escapeHtml(d.url)}</div>
+      </div>
+      <div class="doc-actions">
+        <button class="doc-edit" title="Edit">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+        <button class="doc-del" title="Delete">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+    </div>
+  `).join('');
+
+  wrap.querySelectorAll('.doc-card').forEach(card=>{
+    const d = docs.find(x=>x.id===card.dataset.id);
+    card.querySelector('.doc-main').onclick = () => window.open(d.url, '_blank');
+    card.querySelector('.doc-edit').onclick = () => openEditDoc(d);
+    card.querySelector('.doc-del').onclick = () => confirmDocDelete(d, card);
+  });
+}
+
+function confirmDocDelete(d, card){
+  card.innerHTML = `<div class="confirm-row"><span>Delete "${escapeHtml(d.name)}"?</span><button class="no">Cancel</button><button class="yes">Delete</button></div>`;
+  card.querySelector('.no').onclick = () => renderDocs();
+  card.querySelector('.yes').onclick = () => {
+    docs = docs.filter(x=>x.id!==d.id);
+    persistDocs();
+    showToast('Link deleted');
+    renderDocs();
+  };
+}
+
+const docBackdrop = document.getElementById('docBackdrop');
+const docName = document.getElementById('docName');
+const docUrl = document.getElementById('docUrl');
+const docId = document.getElementById('docId');
+const docTitle = document.getElementById('docTitle');
+
+function openAddDoc(){
+  docTitle.textContent = 'Add Document Link';
+  docId.value = '';
+  docName.value = '';
+  docUrl.value = '';
+  docBackdrop.classList.add('open');
+  setTimeout(()=>docName.focus(), 100);
+}
+function openEditDoc(d){
+  docTitle.textContent = 'Edit Document Link';
+  docId.value = d.id;
+  docName.value = d.name;
+  docUrl.value = d.url;
+  docBackdrop.classList.add('open');
+}
+document.getElementById('docCancel').onclick = () => docBackdrop.classList.remove('open');
+docBackdrop.onclick = (e) => { if(e.target === docBackdrop) docBackdrop.classList.remove('open'); };
+
+document.getElementById('docSave').onclick = () => {
+  const name = docName.value.trim();
+  const url = docUrl.value.trim();
+  if(!name || !url){ showToast('Add a name and a link'); return; }
+  if(docId.value){
+    const d = docs.find(x=>x.id===docId.value);
+    if(d){ d.name = name; d.url = url; }
+  } else {
+    docs.push({ id: 'doc-'+Date.now()+'-'+Math.floor(Math.random()*1000), name, url });
+  }
+  persistDocs();
+  docBackdrop.classList.remove('open');
+  showToast('Saved');
+  renderDocs();
+};
+
 // ---- History ----
 function renderHistory(){
   const wrap = document.getElementById('historyList');
@@ -1456,6 +1607,7 @@ loadDrills();
 loadPlayers();
 loadSessions();
 loadGames();
+loadDocs();
 document.getElementById('sessionDate').value = todayISO();
 document.getElementById('gameDate').value = todayISO();
 render();
