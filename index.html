@@ -199,12 +199,12 @@
   }
   .tabbar button{
     flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
-    background:none; border:none; padding:6px 2px; cursor:pointer; color: var(--ink-soft);
-    font-family: var(--font-body); font-size:10.5px; font-weight:600; position:relative;
+    background:none; border:none; padding:6px 1px; cursor:pointer; color: var(--ink-soft);
+    font-family: var(--font-body); font-size:10px; font-weight:600; position:relative;
   }
   .tabbar button.active{ color: var(--pitch-mid); }
   .tab-badge{
-    position:absolute; top:-2px; right:24%; background: var(--red); color:#fff; font-size:10px;
+    position:absolute; top:-2px; right:22%; background: var(--red); color:#fff; font-size:10px;
     border-radius:8px; padding:0 5px; min-width:15px; text-align:center; font-weight:700; line-height:15px;
   }
 
@@ -270,7 +270,7 @@
     display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--chalk-line);
   }
   .attend-row:last-child{ border-bottom:none; }
-  .attend-row input{ width:18px; height:18px; accent-color: var(--pitch-mid); flex-shrink:0; }
+  .attend-row input[type=checkbox]{ width:18px; height:18px; accent-color: var(--pitch-mid); flex-shrink:0; }
   .attend-row .att-name{ flex:1; font-size:14.5px; }
   .attend-row .att-count{ font-size:11px; color: var(--ink-soft); flex-shrink:0; }
   .add-player-row{ display:flex; gap:8px; margin-top:8px; }
@@ -299,6 +299,38 @@
   .summary-row:last-child{ border-bottom:none; }
   .summary-row .sr-name{ font-size:14px; font-weight:500; }
   .summary-row .sr-val{ font-family: var(--font-display); font-weight:700; color: var(--pitch-mid); font-size:14px; }
+
+  .score-row{ display:flex; align-items:flex-end; gap:12px; }
+  .score-box{ flex:1; }
+  .score-box label{ display:block; font-size:11px; color: var(--ink-soft); margin-bottom:4px; font-weight:600; text-transform:uppercase; }
+  .score-box input{
+    width:100%; padding:11px; border-radius:10px; border:1.5px solid var(--chalk-line);
+    font-family: var(--font-display); font-size:20px; font-weight:700; text-align:center; background:#fff;
+  }
+  .score-sep{ font-family: var(--font-display); font-size:22px; font-weight:700; color: var(--ink-soft); padding-bottom:12px; }
+
+  .goal-stepper{ display:none; align-items:center; gap:6px; flex-shrink:0; }
+  .goal-stepper button{
+    width:24px; height:24px; border-radius:6px; border:1px solid var(--chalk-line); background: var(--chalk);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:700; font-size:14px; color: var(--ink);
+  }
+  .goal-stepper .g-count{ font-family: var(--font-display); font-weight:700; min-width:14px; text-align:center; font-size:14px; }
+
+  .game-card{
+    background:#fff; border:1px solid var(--chalk-line); border-radius:14px; padding:12px 14px; margin-bottom:12px;
+  }
+  .game-card .gc-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .game-card .gc-title{ font-family: var(--font-display); font-weight:700; font-size:14px; color: var(--pitch-dark); }
+  .game-card .gc-score{ font-family: var(--font-display); font-weight:700; font-size:20px; color: var(--pitch-mid); flex-shrink:0; }
+  .game-card .gc-row{ font-size:13px; color: var(--ink-soft); margin-top:6px; line-height:1.5; }
+  .game-card .gc-row b{ color: var(--ink); }
+  .game-card .gc-notes{ margin-top:8px; font-size:13.5px; background: var(--chalk); border-radius:8px; padding:8px 10px; }
+  .gc-actions{ display:flex; gap:6px; }
+  .gc-actions button{
+    width:30px; height:30px; border-radius:8px; border:1px solid var(--chalk-line); background: var(--chalk);
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
+  .gc-actions .gc-del{ color: var(--red); }
 </style>
 </head>
 <body>
@@ -365,6 +397,53 @@
   <button class="btn btn-primary save-session-btn" id="saveSessionBtn">Save This Week's Session</button>
 </section>
 
+<section id="tab-games" class="tab-panel" style="display:none">
+  <div class="field">
+    <label>Match date</label>
+    <input type="date" id="gameDate">
+  </div>
+  <div class="field">
+    <label>Opponent (optional)</label>
+    <input type="text" id="gameOpponent" placeholder="e.g. Chorlton Villa">
+  </div>
+
+  <h3>Score</h3>
+  <div class="score-row">
+    <div class="score-box">
+      <label>Us</label>
+      <input type="number" id="scoreUs" min="0" value="0">
+    </div>
+    <div class="score-sep">–</div>
+    <div class="score-box">
+      <label>Them</label>
+      <input type="number" id="scoreThem" min="0" value="0">
+    </div>
+  </div>
+
+  <h3>Players &amp; Scorers</h3>
+  <div class="attend-actions">
+    <button class="btn-mini" id="gamePlayersAllBtn">Select all</button>
+    <button class="btn-mini" id="gamePlayersNoneBtn">Clear</button>
+  </div>
+  <div id="gamePlayersList"></div>
+  <div class="hint">Tick who played. A goal counter appears next to their name — tap + each time they score.</div>
+
+  <h3>Player of the Week</h3>
+  <select id="gamePotmSelect"></select>
+  <div class="totw-tally" id="gamePotmTallyMini"></div>
+
+  <h3>Notes</h3>
+  <textarea id="gameNotes" placeholder="Match report notes, standout moments…"></textarea>
+
+  <div class="sheet-actions" style="margin-top:20px;">
+    <button class="btn btn-ghost" id="gameCancelEditBtn" style="display:none">Cancel Edit</button>
+    <button class="btn btn-primary" id="saveGameBtn">Save Game</button>
+  </div>
+
+  <h3>Past Games</h3>
+  <div id="gamesList"></div>
+</section>
+
 <section id="tab-history" class="tab-panel" style="display:none">
   <div id="historyList"></div>
 </section>
@@ -379,20 +458,24 @@
 
 <nav class="tabbar" id="tabbar">
   <button data-tab="drills" class="active">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
     <span>Drills</span>
   </button>
   <button data-tab="session">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
     <span>Session</span>
     <span class="tab-badge" id="sessionBadge" style="display:none">0</span>
   </button>
+  <button data-tab="games">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+    <span>Games</span>
+  </button>
   <button data-tab="history">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
     <span>History</span>
   </button>
   <button data-tab="summary">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     <span>Summary</span>
   </button>
 </nav>
@@ -549,12 +632,17 @@ const ROSTER_SEED = [
 let drills = [];
 let players = [];
 let sessions = [];
+let games = [];
 let activeCategory = 'all';
 let searchTerm = '';
 let usedFilter = 'all';
 let activeTab = 'drills';
 let currentAttendance = [];
 let currentTrainer = '';
+let currentGamePlayers = [];
+let currentGameScorers = {};
+let currentGamePOTM = '';
+let editingGameId = null;
 
 const listContainer = document.getElementById('listContainer');
 const chipRow = document.getElementById('chipRow');
@@ -623,6 +711,17 @@ function persistSessions(){
   catch(e){ showToast('Save failed'); }
 }
 
+function loadGames(){
+  try{
+    const raw = localStorage.getItem('coachlog_games');
+    games = raw ? JSON.parse(raw) : [];
+  }catch(e){ games = []; }
+}
+function persistGames(){
+  try{ localStorage.setItem('coachlog_games', JSON.stringify(games)); }
+  catch(e){ showToast('Save failed'); }
+}
+
 function buildChips(){
   chipRow.innerHTML = '';
   const counts = { all: drills.length };
@@ -646,6 +745,7 @@ function buildChips(){
 function updateCountPill(){
   if(activeTab==='drills') countPill.textContent = `${drills.length} drill${drills.length===1?'':'s'}`;
   else if(activeTab==='session') countPill.textContent = `${drills.filter(d=>d.inSession).length} queued`;
+  else if(activeTab==='games') countPill.textContent = `${games.length} game${games.length===1?'':'s'}`;
   else if(activeTab==='history') countPill.textContent = `${sessions.length} session${sessions.length===1?'':'s'}`;
   else if(activeTab==='summary') countPill.textContent = `${players.length} player${players.length===1?'':'s'}`;
 }
@@ -952,10 +1052,10 @@ document.getElementById('editAllSave').onclick = () => {
 };
 
 // ---- Tabs ----
-const TAB_TITLES = { drills:'Drill Library', session:"This Week's Session", history:'Session History', summary:'Squad Summary' };
+const TAB_TITLES = { drills:'Drill Library', session:"This Week's Session", games:'Match Games', history:'Session History', summary:'Squad Summary' };
 function switchTab(tab){
   activeTab = tab;
-  ['drills','session','history','summary'].forEach(t=>{
+  ['drills','session','games','history','summary'].forEach(t=>{
     document.getElementById('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
   });
   document.getElementById('viewTitle').textContent = TAB_TITLES[tab];
@@ -963,6 +1063,7 @@ function switchTab(tab){
   document.getElementById('addFab').style.display = tab==='drills' ? 'flex' : 'none';
   document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   if(tab==='session') renderSessionPanel();
+  if(tab==='games') renderGamesPanel();
   if(tab==='history') renderHistory();
   if(tab==='summary') renderSummary();
   updateCountPill();
@@ -1063,6 +1164,193 @@ document.getElementById('saveSessionBtn').onclick = () => {
   renderSessionPanel();
 };
 
+// ---- Games builder ----
+function renderGamesPanel(){
+  const dateInput = document.getElementById('gameDate');
+  if(!dateInput.value) dateInput.value = todayISO();
+
+  const wrap = document.getElementById('gamePlayersList');
+  wrap.innerHTML = `<div class="attend-list">` + players.map(p=>{
+    const isIn = currentGamePlayers.includes(p);
+    const goals = currentGameScorers[p] || 0;
+    return `
+      <div class="attend-row">
+        <input type="checkbox" class="game-played-check" data-name="${escapeAttr(p)}" ${isIn ? 'checked' : ''}>
+        <span class="att-name">${escapeHtml(p)}</span>
+        <div class="goal-stepper" style="display:${isIn ? 'flex' : 'none'}">
+          <button class="g-minus" data-name="${escapeAttr(p)}">−</button>
+          <span class="g-count">${goals}</span>
+          <button class="g-plus" data-name="${escapeAttr(p)}">+</button>
+        </div>
+      </div>
+    `;
+  }).join('') + `</div>`;
+
+  wrap.querySelectorAll('.game-played-check').forEach(chk=>{
+    chk.onchange = () => {
+      const name = chk.dataset.name;
+      if(chk.checked){
+        if(!currentGamePlayers.includes(name)) currentGamePlayers.push(name);
+      } else {
+        currentGamePlayers = currentGamePlayers.filter(n=>n!==name);
+        delete currentGameScorers[name];
+      }
+      renderGamesPanel();
+    };
+  });
+  wrap.querySelectorAll('.g-plus').forEach(btn=>{
+    btn.onclick = () => {
+      const name = btn.dataset.name;
+      currentGameScorers[name] = (currentGameScorers[name]||0) + 1;
+      renderGamesPanel();
+    };
+  });
+  wrap.querySelectorAll('.g-minus').forEach(btn=>{
+    btn.onclick = () => {
+      const name = btn.dataset.name;
+      const n = Math.max(0, (currentGameScorers[name]||0) - 1);
+      if(n===0) delete currentGameScorers[name]; else currentGameScorers[name] = n;
+      renderGamesPanel();
+    };
+  });
+
+  const sel = document.getElementById('gamePotmSelect');
+  sel.innerHTML = `<option value="">— none yet —</option>` + players.map(p=>`<option value="${escapeAttr(p)}" ${currentGamePOTM===p?'selected':''}>${escapeHtml(p)}</option>`).join('');
+
+  const tallyEl = document.getElementById('gamePotmTallyMini');
+  const counts = players.map(p => ({p, n: games.filter(g=>g.potm===p).length})).sort((a,b)=>a.n-b.n || a.p.localeCompare(b.p));
+  tallyEl.innerHTML = counts.length ? ('Least awarded so far: ' + counts.slice(0,3).map(c=>`<b>${escapeHtml(c.p)}</b> (${c.n})`).join(', ')) : '';
+
+  document.getElementById('gameCancelEditBtn').style.display = editingGameId ? 'block' : 'none';
+  document.getElementById('saveGameBtn').textContent = editingGameId ? 'Update Game' : 'Save Game';
+
+  renderGamesList();
+}
+
+document.getElementById('gamePlayersAllBtn').onclick = () => { currentGamePlayers = players.slice(); renderGamesPanel(); };
+document.getElementById('gamePlayersNoneBtn').onclick = () => { currentGamePlayers = []; currentGameScorers = {}; renderGamesPanel(); };
+document.getElementById('gamePotmSelect').onchange = (e) => { currentGamePOTM = e.target.value; };
+
+function resetGameForm(){
+  editingGameId = null;
+  currentGamePlayers = [];
+  currentGameScorers = {};
+  currentGamePOTM = '';
+  document.getElementById('gameDate').value = todayISO();
+  document.getElementById('gameOpponent').value = '';
+  document.getElementById('scoreUs').value = 0;
+  document.getElementById('scoreThem').value = 0;
+  document.getElementById('gameNotes').value = '';
+}
+document.getElementById('gameCancelEditBtn').onclick = () => { resetGameForm(); renderGamesPanel(); showToast('Edit cancelled'); };
+
+document.getElementById('saveGameBtn').onclick = () => {
+  const date = document.getElementById('gameDate').value || todayISO();
+  const opponent = document.getElementById('gameOpponent').value.trim();
+  const scoreUs = parseInt(document.getElementById('scoreUs').value, 10) || 0;
+  const scoreThem = parseInt(document.getElementById('scoreThem').value, 10) || 0;
+  const notes = document.getElementById('gameNotes').value.trim();
+
+  if(currentGamePlayers.length === 0){
+    showToast('Add some players first');
+    return;
+  }
+
+  const gameData = {
+    date, opponent, scoreUs, scoreThem,
+    players: currentGamePlayers.slice(),
+    scorers: {...currentGameScorers},
+    potm: currentGamePOTM || null,
+    notes
+  };
+
+  if(editingGameId){
+    const idx = games.findIndex(g=>g.id===editingGameId);
+    if(idx>-1) games[idx] = { ...games[idx], ...gameData };
+    showToast('Game updated');
+  } else {
+    games.push({ id: 'g-'+Date.now(), ...gameData });
+    showToast('Game saved');
+  }
+  persistGames();
+  resetGameForm();
+  renderGamesPanel();
+};
+
+function renderGamesList(){
+  const wrap = document.getElementById('gamesList');
+  if(games.length === 0){
+    wrap.innerHTML = `<div class="empty"><h3>No games logged yet</h3><p>Fill in the form above after your next match.</p></div>`;
+    return;
+  }
+  const sorted = games.slice().sort((a,b)=> b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  wrap.innerHTML = sorted.map(g => {
+    const scorersList = Object.entries(g.scorers||{}).sort((a,b)=>b[1]-a[1])
+      .map(([name,n]) => `${escapeHtml(name)}${n>1?` (${n})`:''}`).join(', ');
+    return `
+      <div class="game-card" data-id="${g.id}">
+        <div class="gc-top">
+          <div class="gc-title">${formatDate(g.date)}${g.opponent ? ' vs '+escapeHtml(g.opponent) : ''}</div>
+          <div class="gc-score">${g.scoreUs}–${g.scoreThem}</div>
+        </div>
+        <div class="gc-row"><b>Played:</b> ${g.players.length} — ${escapeHtml(g.players.join(', '))}</div>
+        <div class="gc-row"><b>Scorers:</b> ${scorersList || '—'}</div>
+        <div class="gc-row"><b>Player of the Week:</b> ${g.potm ? escapeHtml(g.potm) : '—'}</div>
+        ${g.notes ? `<div class="gc-notes">${escapeHtml(g.notes)}</div>` : ''}
+        <div class="gc-actions" style="margin-top:10px;">
+          <button class="gc-edit" data-id="${g.id}" title="Edit">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button class="gc-del" data-id="${g.id}" title="Delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+  wrap.querySelectorAll('.gc-edit').forEach(btn=>{
+    btn.onclick = () => openEditGame(btn.dataset.id);
+  });
+  wrap.querySelectorAll('.gc-del').forEach(btn=>{
+    btn.onclick = () => confirmGameDelete(btn.dataset.id, btn.closest('.game-card'));
+  });
+}
+
+function openEditGame(id){
+  const g = games.find(x=>x.id===id);
+  if(!g) return;
+  editingGameId = id;
+  currentGamePlayers = g.players.slice();
+  currentGameScorers = {...(g.scorers||{})};
+  currentGamePOTM = g.potm || '';
+  document.getElementById('gameDate').value = g.date;
+  document.getElementById('gameOpponent').value = g.opponent || '';
+  document.getElementById('scoreUs').value = g.scoreUs;
+  document.getElementById('scoreThem').value = g.scoreThem;
+  document.getElementById('gameNotes').value = g.notes || '';
+  renderGamesPanel();
+  window.scrollTo({top:0, behavior:'smooth'});
+  showToast('Editing game — scroll up to make changes');
+}
+
+function confirmGameDelete(id, cardEl){
+  const top = cardEl.querySelector('.gc-top');
+  top.innerHTML = `<div class="gc-title">Delete this game?</div>`;
+  const row = document.createElement('div');
+  row.className = 'confirm-row';
+  row.style.marginTop = '8px';
+  row.innerHTML = `<span>This can't be undone</span><button class="no">Cancel</button><button class="yes">Delete</button>`;
+  cardEl.appendChild(row);
+  row.querySelector('.no').onclick = () => renderGamesList();
+  row.querySelector('.yes').onclick = () => {
+    games = games.filter(x=>x.id!==id);
+    persistGames();
+    if(editingGameId === id) resetGameForm();
+    showToast('Game deleted');
+    renderGamesPanel();
+  };
+}
+
 // ---- History ----
 function renderHistory(){
   const wrap = document.getElementById('historyList');
@@ -1113,33 +1401,63 @@ function confirmHistoryDelete(id, cardEl){
 // ---- Summary ----
 function renderSummary(){
   const wrap = document.getElementById('summaryContent');
-  if(sessions.length === 0){
-    wrap.innerHTML = `<div class="empty"><h3>No sessions yet</h3><p>Attendance and Trainer of the Week stats will show up here once you've saved a session.</p></div>`;
+  if(sessions.length === 0 && games.length === 0){
+    wrap.innerHTML = `<div class="empty"><h3>No sessions or games yet</h3><p>Stats will show up here once you've saved a session or a game.</p></div>`;
     return;
   }
-  const totalSessions = sessions.length;
-  const attendance = players.map(p => ({ name:p, n: sessions.filter(s=>s.attendance.includes(p)).length }))
-    .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
-  const totw = players.map(p => ({ name:p, n: sessions.filter(s=>s.trainerOfWeek===p).length }))
-    .sort((a,b)=> a.n-b.n || a.name.localeCompare(b.name));
+  let html = '';
 
-  wrap.innerHTML = `
-    <h3>Attendance (${totalSessions} session${totalSessions===1?'':'s'} logged)</h3>
-    <div class="summary-table">
-      ${attendance.map(a => `<div class="summary-row"><span class="sr-name">${escapeHtml(a.name)}</span><span class="sr-val">${a.n}/${totalSessions}</span></div>`).join('')}
-    </div>
-    <h3>Trainer of the Week — least awarded first</h3>
-    <div class="summary-table">
-      ${totw.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join('')}
-    </div>
-  `;
+  if(sessions.length > 0){
+    const totalSessions = sessions.length;
+    const attendance = players.map(p => ({ name:p, n: sessions.filter(s=>s.attendance.includes(p)).length }))
+      .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
+    const totw = players.map(p => ({ name:p, n: sessions.filter(s=>s.trainerOfWeek===p).length }))
+      .sort((a,b)=> a.n-b.n || a.name.localeCompare(b.name));
+
+    html += `<h3>Training Attendance (${totalSessions} session${totalSessions===1?'':'s'} logged)</h3>
+      <div class="summary-table">
+        ${attendance.map(a => `<div class="summary-row"><span class="sr-name">${escapeHtml(a.name)}</span><span class="sr-val">${a.n}/${totalSessions}</span></div>`).join('')}
+      </div>
+      <h3>Trainer of the Week — least awarded first</h3>
+      <div class="summary-table">
+        ${totw.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join('')}
+      </div>`;
+  }
+
+  if(games.length > 0){
+    const totalGames = games.length;
+    const appearances = players.map(p => ({ name:p, n: games.filter(g=>g.players.includes(p)).length }))
+      .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
+    const goals = players.map(p => ({ name:p, n: games.reduce((sum,g)=> sum + ((g.scorers && g.scorers[p]) || 0), 0) }))
+      .filter(x=>x.n>0)
+      .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
+    const potm = players.map(p => ({ name:p, n: games.filter(g=>g.potm===p).length }))
+      .sort((a,b)=> a.n-b.n || a.name.localeCompare(b.name));
+
+    html += `<h3>Match Appearances (${totalGames} game${totalGames===1?'':'s'} logged)</h3>
+      <div class="summary-table">
+        ${appearances.map(a => `<div class="summary-row"><span class="sr-name">${escapeHtml(a.name)}</span><span class="sr-val">${a.n}/${totalGames}</span></div>`).join('')}
+      </div>
+      <h3>Goalscorers</h3>
+      <div class="summary-table">
+        ${goals.length ? goals.map(g => `<div class="summary-row"><span class="sr-name">${escapeHtml(g.name)}</span><span class="sr-val">${g.n}</span></div>`).join('') : `<div class="summary-row"><span class="sr-name">No goals logged yet</span></div>`}
+      </div>
+      <h3>Player of the Week — least awarded first</h3>
+      <div class="summary-table">
+        ${potm.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join('')}
+      </div>`;
+  }
+
+  wrap.innerHTML = html;
 }
 
 // ---- Init ----
 loadDrills();
 loadPlayers();
 loadSessions();
+loadGames();
 document.getElementById('sessionDate').value = todayISO();
+document.getElementById('gameDate').value = todayISO();
 render();
 </script>
 </body>
