@@ -716,10 +716,11 @@ const chipRow = document.getElementById('chipRow');
 const countPill = document.getElementById('countPill');
 const toastEl = document.getElementById('toast');
 
-function showToast(msg){
+function showToast(msg, duration){
   toastEl.textContent = msg;
   toastEl.classList.add('show');
-  setTimeout(()=> toastEl.classList.remove('show'), 1600);
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=> toastEl.classList.remove('show'), duration || 1600);
 }
 
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -746,6 +747,26 @@ function sheetsConfigured(){ return !!(GOOGLE_CLIENT_ID && SPREADSHEET_ID); }
 let accessToken = null;
 let rowMap = {}; // data key -> sheet row number
 
+function loadCachedToken(){
+  try{
+    const raw = localStorage.getItem('coachlog_google_token');
+    if(!raw) return null;
+    const cached = JSON.parse(raw);
+    if(cached.expiresAt && cached.expiresAt - Date.now() > 60000){
+      return cached.token;
+    }
+    localStorage.removeItem('coachlog_google_token');
+    return null;
+  }catch(e){ return null; }
+}
+function cacheToken(token, expiresInSeconds){
+  try{
+    localStorage.setItem('coachlog_google_token', JSON.stringify({
+      token, expiresAt: Date.now() + ((expiresInSeconds||3300) * 1000)
+    }));
+  }catch(e){}
+}
+
 function setSyncStatus(state){
   const dot = document.getElementById('syncDot');
   if(!dot) return;
@@ -764,21 +785,29 @@ function setSyncStatus(state){
 function initGoogleAuth(){
   const btn = document.getElementById('signInBtn');
   if(!sheetsConfigured()){ setSyncStatus('off'); return; }
-  setSyncStatus('signedout');
   btn.style.display = 'inline-flex';
-  btn.onclick = () => {
-    const tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: GOOGLE_CLIENT_ID,
-      scope: 'https://www.googleapis.com/auth/spreadsheets',
-      callback: async (resp) => {
-        if(resp.error){ setSyncStatus('error'); return; }
-        accessToken = resp.access_token;
-        btn.textContent = 'Signed in ✓';
-        await afterSignIn();
-      }
-    });
-    tokenClient.requestAccessToken();
-  };
+
+  const tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/spreadsheets',
+    callback: async (resp) => {
+      if(resp.error){ setSyncStatus('error'); return; }
+      accessToken = resp.access_token;
+      cacheToken(resp.access_token, resp.expires_in);
+      btn.textContent = 'Signed in ✓';
+      await afterSignIn();
+    }
+  });
+  btn.onclick = () => tokenClient.requestAccessToken();
+
+  const cached = loadCachedToken();
+  if(cached){
+    accessToken = cached;
+    btn.textContent = 'Signed in ✓';
+    afterSignIn();
+  } else {
+    setSyncStatus('signedout');
+  }
 }
 
 async function afterSignIn(){
@@ -798,6 +827,14 @@ async function afterSignIn(){
   render();
 }
 
+function invalidateToken(){
+  accessToken = null;
+  try{ localStorage.removeItem('coachlog_google_token'); }catch(e){}
+  const btn = document.getElementById('signInBtn');
+  if(btn) btn.textContent = 'Sign in';
+  setSyncStatus('signedout');
+}
+
 async function sheetsPullAll(){
   if(!accessToken) return null;
   try{
@@ -807,7 +844,8 @@ async function sheetsPullAll(){
     if(!res.ok){
       const errBody = await res.json().catch(()=>({}));
       const msg = (errBody.error && errBody.error.message) || `HTTP ${res.status}`;
-      showToast('Sync read failed: ' + msg);
+      showToast('Sync read failed: ' + msg, 6000);
+      if(res.status === 401) invalidateToken();
       return null;
     }
     const data = await res.json();
@@ -820,7 +858,7 @@ async function sheetsPullAll(){
       if(key){ result[key] = value; rowMap[key] = i + 2; }
     });
     return result;
-  }catch(e){ showToast('Sync read failed: ' + e.message); return null; }
+  }catch(e){ showToast('Sync read failed: ' + e.message, 6000); return null; }
 }
 
 async function pushKey(key, value){
@@ -846,8 +884,9 @@ async function pushKey(key, value){
     if(!res.ok){
       const errBody = await res.json().catch(()=>({}));
       const msg = (errBody.error && errBody.error.message) || `HTTP ${res.status}`;
-      showToast('Sync write failed: ' + msg);
+      showToast('Sync write failed: ' + msg, 6000);
       setSyncStatus('error');
+      if(res.status === 401) invalidateToken();
       return;
     }
     if(!rowMap[key]){
@@ -859,7 +898,7 @@ async function pushKey(key, value){
     clearPending(key);
     setSyncStatus(pendingSync.size ? 'pending' : 'ok');
   }catch(e){
-    showToast('Sync write failed: ' + e.message);
+    showToast('Sync write failed: ' + e.message, 6000);
     setSyncStatus('error');
   }
 }
