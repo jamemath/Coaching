@@ -787,18 +787,24 @@ function initGoogleAuth(){
   if(!sheetsConfigured()){ setSyncStatus('off'); return; }
   btn.style.display = 'inline-flex';
 
-  const tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/spreadsheets',
-    callback: async (resp) => {
-      if(resp.error){ setSyncStatus('error'); return; }
-      accessToken = resp.access_token;
-      cacheToken(resp.access_token, resp.expires_in);
-      btn.textContent = 'Signed in ✓';
-      await afterSignIn();
+  btn.onclick = () => {
+    if(typeof google === 'undefined' || !google.accounts){
+      showToast('Still loading Google sign-in — try again in a second', 4000);
+      return;
     }
-  });
-  btn.onclick = () => tokenClient.requestAccessToken();
+    const tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/spreadsheets',
+      callback: async (resp) => {
+        if(resp.error){ setSyncStatus('error'); return; }
+        accessToken = resp.access_token;
+        cacheToken(resp.access_token, resp.expires_in);
+        btn.textContent = 'Signed in ✓';
+        await afterSignIn();
+      }
+    });
+    tokenClient.requestAccessToken();
+  };
 
   const cached = loadCachedToken();
   if(cached){
@@ -1851,7 +1857,7 @@ function renderSummary(){
 
 // ---- Init ----
 function init(){
-  initGoogleAuth();
+  try{ initGoogleAuth(); }catch(e){ console.error('initGoogleAuth failed', e); }
   loadDrills();
   loadPlayers();
   loadSessions();
