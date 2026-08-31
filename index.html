@@ -463,6 +463,12 @@
 </section>
 
 <section id="tab-session" class="tab-panel" style="display:none">
+  <div class="seg-row">
+    <div class="seg" id="sessionSeg">
+      <button data-val="preds">Preds</button>
+      <button data-val="meerkats" class="active">Meerkats</button>
+    </div>
+  </div>
   <div class="field">
     <label>Session date</label>
     <input type="date" id="sessionDate">
@@ -563,10 +569,22 @@
 </section>
 
 <section id="tab-history" class="tab-panel" style="display:none">
+  <div class="seg-row">
+    <div class="seg" id="historySeg">
+      <button data-val="preds">Preds</button>
+      <button data-val="meerkats" class="active">Meerkats</button>
+    </div>
+  </div>
   <div id="historyList"></div>
 </section>
 
 <section id="tab-summary" class="tab-panel" style="display:none">
+  <div class="seg-row">
+    <div class="seg" id="summarySeg">
+      <button data-val="preds">Preds</button>
+      <button data-val="meerkats" class="active">Meerkats</button>
+    </div>
+  </div>
   <div id="summaryContent"></div>
 </section>
 
@@ -957,7 +975,7 @@ const LEAGUE_SEED_MEERKATS = [];
 let drills = [];
 let players = [];
 let coaches = [];
-let sessions = [];
+let sessions = { preds: [], meerkats: [] };
 let games = [];
 let docs = [];
 let leagueTables = { preds: [], meerkats: [] };
@@ -966,6 +984,10 @@ let fixtures = { preds: [], meerkats: [] };
 let predsPlayers = [];
 let activeFixtureTeam = 'preds';
 let activeGamesTeam = 'meerkats';
+let activeSessionTeam = 'meerkats';
+let activeHistoryTeam = 'meerkats';
+let activeSummaryTeam = 'meerkats';
+let predsCoaches = [];
 let editingFixtureId = null;
 let squadEditFixtureId = null;
 let squadDraft = [];
@@ -1006,7 +1028,7 @@ const GOOGLE_CLIENT_ID = '15452691797-ecp1bs72429ol7nrueqvmjrgr3pv8m4j.apps.goog
 const SPREADSHEET_ID = '1VFWgZQowXyHJ0MBpWVMLkliyqN-rLjHfA8Ikwk6Scm8';
 const SHEET_TAB = 'Data';      // tab name inside that sheet
 
-const SYNC_KEYS = ['coachlog_drills','coachlog_players','coachlog_coaches','coachlog_sessions','coachlog_games','coachlog_docs','coachlog_league','coachlog_fixtures','coachlog_preds_players'];
+const SYNC_KEYS = ['coachlog_drills','coachlog_players','coachlog_coaches','coachlog_sessions','coachlog_games','coachlog_docs','coachlog_league','coachlog_fixtures','coachlog_preds_players','coachlog_preds_coaches'];
 let pendingSync = new Set();
 try{ pendingSync = new Set(JSON.parse(localStorage.getItem('coachlog_pending_sync') || '[]')); }catch(e){}
 
@@ -1120,7 +1142,7 @@ async function afterSignIn(){
   } else {
     setSyncStatus('error');
   }
-  loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs(); loadLeague(); loadFixtures(); loadPredsPlayers();
+  loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs(); loadLeague(); loadFixtures(); loadPredsPlayers(); loadPredsCoaches();
   migrateLegacyGames();
   render();
 }
@@ -1281,11 +1303,53 @@ function persistCoaches(){
   catch(e){ showToast('Save failed'); }
 }
 
+function loadPredsCoaches(){
+  try{
+    const raw = localStorage.getItem('coachlog_preds_coaches');
+    predsCoaches = raw ? JSON.parse(raw) : [];
+  }catch(e){ predsCoaches = []; }
+}
+function persistPredsCoaches(){
+  try{
+    const raw = JSON.stringify(predsCoaches);
+    localStorage.setItem('coachlog_preds_coaches', raw);
+    pushKey('coachlog_preds_coaches', raw);
+  }
+  catch(e){ showToast('Save failed'); }
+}
+function coachesFor(team){ return team==='preds' ? predsCoaches : coaches; }
+
 function loadSessions(){
   try{
     const raw = localStorage.getItem('coachlog_sessions');
-    sessions = raw ? JSON.parse(raw) : [];
-  }catch(e){ sessions = []; }
+    if(raw){
+      const parsed = JSON.parse(raw);
+      if(Array.isArray(parsed)){
+        // Legacy format was one flat Meerkats-only list — migrate into the new
+        // per-team shape without losing anything already saved.
+        sessions = { preds: [], meerkats: parsed };
+        persistSessions();
+      } else {
+        sessions = parsed;
+      }
+    } else {
+      sessions = { preds: [], meerkats: [] };
+    }
+  }catch(e){ sessions = { preds: [], meerkats: [] }; }
+  if(!sessions.preds) sessions.preds = [];
+  if(!sessions.meerkats) sessions.meerkats = [];
+  try{
+    const savedTeam = localStorage.getItem('coachlog_session_active');
+    if(savedTeam === 'preds' || savedTeam === 'meerkats') activeSessionTeam = savedTeam;
+  }catch(e){}
+  try{
+    const savedHistoryTeam = localStorage.getItem('coachlog_history_active');
+    if(savedHistoryTeam === 'preds' || savedHistoryTeam === 'meerkats') activeHistoryTeam = savedHistoryTeam;
+  }catch(e){}
+  try{
+    const savedSummaryTeam = localStorage.getItem('coachlog_summary_active');
+    if(savedSummaryTeam === 'preds' || savedSummaryTeam === 'meerkats') activeSummaryTeam = savedSummaryTeam;
+  }catch(e){}
 }
 function persistSessions(){
   try{
@@ -1423,7 +1487,7 @@ function updateCountPill(){
   if(activeTab==='drills') countPill.textContent = `${drills.length} drill${drills.length===1?'':'s'}`;
   else if(activeTab==='session') countPill.textContent = `${drills.filter(d=>d.inSession).length} queued`;
   else if(activeTab==='games') countPill.textContent = `${playedFixturesFor(activeGamesTeam).length} game${playedFixturesFor(activeGamesTeam).length===1?'':'s'}`;
-  else if(activeTab==='history') countPill.textContent = `${sessions.length} session${sessions.length===1?'':'s'}`;
+  else if(activeTab==='history') countPill.textContent = `${(sessions[activeHistoryTeam]||[]).length} session${(sessions[activeHistoryTeam]||[]).length===1?'':'s'}`;
   else if(activeTab==='summary') countPill.textContent = `${players.length} player${players.length===1?'':'s'}`;
   else if(activeTab==='documents') countPill.textContent = `${docs.length} link${docs.length===1?'':'s'}`;
 }
@@ -1456,7 +1520,7 @@ function render(){
   filtered.forEach(d=>{
     const info = catInfo(d.category);
     const badgeNum = drills.filter(x=>x.category===d.category).indexOf(d) + 1;
-    const runCount = sessions.filter(s => s.drillIds.includes(d.id)).length;
+    const runCount = [...(sessions.preds||[]), ...(sessions.meerkats||[])].filter(s => s.drillIds.includes(d.id)).length;
 
     const card = document.createElement('div');
     card.className = 'card' + (d.used ? ' card-used' : '');
@@ -1758,21 +1822,38 @@ document.querySelectorAll('#tabbar button').forEach(b=>{
 });
 
 // ---- Session builder ----
+document.querySelectorAll('#sessionSeg button').forEach(b=>{
+  b.onclick = () => {
+    activeSessionTeam = b.dataset.val;
+    try{ localStorage.setItem('coachlog_session_active', activeSessionTeam); }catch(e){}
+    currentAttendance = [];
+    currentTrainer = '';
+    currentLeadCoach = '';
+    currentQuickDrills = [];
+    renderSessionPanel();
+  };
+});
+
 function renderSessionPanel(){
+  document.querySelectorAll('#sessionSeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===activeSessionTeam));
   const dateInput = document.getElementById('sessionDate');
   if(!dateInput.value) dateInput.value = todayISO();
 
+  const roster = fixtureRoster(activeSessionTeam);
+  const teamCoaches = coachesFor(activeSessionTeam);
+  const teamSessions = sessions[activeSessionTeam] || [];
+
   const leadSel = document.getElementById('leadCoachSelect');
-  leadSel.innerHTML = `<option value="">— none yet —</option>` + coaches.map(c=>`<option value="${escapeAttr(c)}" ${currentLeadCoach===c?'selected':''}>${escapeHtml(c)}</option>`).join('');
+  leadSel.innerHTML = `<option value="">— none yet —</option>` + teamCoaches.map(c=>`<option value="${escapeAttr(c)}" ${currentLeadCoach===c?'selected':''}>${escapeHtml(c)}</option>`).join('');
 
   const chipsWrap = document.getElementById('coachChips');
-  chipsWrap.innerHTML = coaches.map(c => `<span class="coach-chip">${escapeHtml(c)}<button class="coach-remove" data-name="${escapeAttr(c)}" title="Remove">✕</button></span>`).join('');
+  chipsWrap.innerHTML = teamCoaches.map(c => `<span class="coach-chip">${escapeHtml(c)}<button class="coach-remove" data-name="${escapeAttr(c)}" title="Remove">✕</button></span>`).join('');
   chipsWrap.querySelectorAll('.coach-remove').forEach(btn=>{
     btn.onclick = () => {
       const name = btn.dataset.name;
-      coaches = coaches.filter(x=>x!==name);
+      if(activeSessionTeam === 'preds'){ predsCoaches = predsCoaches.filter(x=>x!==name); persistPredsCoaches(); }
+      else { coaches = coaches.filter(x=>x!==name); persistCoaches(); }
       if(currentLeadCoach === name) currentLeadCoach = '';
-      persistCoaches();
       renderSessionPanel();
       showToast('Coach removed');
     };
@@ -1820,11 +1901,15 @@ function renderSessionPanel(){
   });
 
   const attendWrap = document.getElementById('attendanceList');
-  attendWrap.innerHTML = `<div class="attend-list">` + players.map(p => {
-    const count = sessions.filter(s=>s.attendance.includes(p)).length;
-    const checked = currentAttendance.includes(p) ? 'checked' : '';
-    return `<div class="attend-row"><input type="checkbox" class="att-check" data-name="${escapeAttr(p)}" ${checked}><span class="att-name">${escapeHtml(p)}</span><span class="att-count">${count} attended</span></div>`;
-  }).join('') + `</div>`;
+  if(roster.length === 0){
+    attendWrap.innerHTML = `<div class="empty"><h3>No players yet</h3><p>Add players below, or via the Fixtures tab's Squad screen.</p></div>`;
+  } else {
+    attendWrap.innerHTML = `<div class="attend-list">` + roster.map(p => {
+      const count = teamSessions.filter(s=>s.attendance.includes(p)).length;
+      const checked = currentAttendance.includes(p) ? 'checked' : '';
+      return `<div class="attend-row"><input type="checkbox" class="att-check" data-name="${escapeAttr(p)}" ${checked}><span class="att-name">${escapeHtml(p)}</span><span class="att-count">${count} attended</span></div>`;
+    }).join('') + `</div>`;
+  }
   attendWrap.querySelectorAll('.att-check').forEach(chk=>{
     chk.onchange = () => {
       const name = chk.dataset.name;
@@ -1834,14 +1919,14 @@ function renderSessionPanel(){
   });
 
   const sel = document.getElementById('trainerSelect');
-  sel.innerHTML = `<option value="">— none yet —</option>` + players.map(p=>`<option value="${escapeAttr(p)}" ${currentTrainer===p?'selected':''}>${escapeHtml(p)}</option>`).join('');
+  sel.innerHTML = `<option value="">— none yet —</option>` + roster.map(p=>`<option value="${escapeAttr(p)}" ${currentTrainer===p?'selected':''}>${escapeHtml(p)}</option>`).join('');
 
   const tallyEl = document.getElementById('totwTallyMini');
-  const counts = players.map(p => ({p, n: sessions.filter(s=>s.trainerOfWeek===p).length})).sort((a,b)=>a.n-b.n || a.p.localeCompare(b.p));
+  const counts = roster.map(p => ({p, n: teamSessions.filter(s=>s.trainerOfWeek===p).length})).sort((a,b)=>a.n-b.n || a.p.localeCompare(b.p));
   tallyEl.innerHTML = counts.length ? ('Least awarded so far: ' + counts.slice(0,3).map(c=>`<b>${escapeHtml(c.p)}</b> (${c.n})`).join(', ')) : '';
 }
 
-document.getElementById('attendAllBtn').onclick = () => { currentAttendance = players.slice(); renderSessionPanel(); };
+document.getElementById('attendAllBtn').onclick = () => { currentAttendance = fixtureRoster(activeSessionTeam).slice(); renderSessionPanel(); };
 document.getElementById('attendNoneBtn').onclick = () => { currentAttendance = []; renderSessionPanel(); };
 document.getElementById('trainerSelect').onchange = (e) => { currentTrainer = e.target.value; };
 document.getElementById('leadCoachSelect').onchange = (e) => { currentLeadCoach = e.target.value; };
@@ -1859,9 +1944,10 @@ document.getElementById('addCoachBtn').onclick = () => {
   const input = document.getElementById('newCoachName');
   const name = input.value.trim();
   if(!name) return;
-  if(coaches.includes(name)){ showToast('Already in coach list'); return; }
-  coaches.push(name);
-  persistCoaches();
+  const list = coachesFor(activeSessionTeam);
+  if(list.includes(name)){ showToast('Already in coach list'); return; }
+  list.push(name);
+  if(activeSessionTeam === 'preds') persistPredsCoaches(); else persistCoaches();
   input.value = '';
   renderSessionPanel();
   showToast('Coach added');
@@ -1871,9 +1957,8 @@ document.getElementById('addPlayerBtn').onclick = () => {
   const input = document.getElementById('newPlayerName');
   const name = input.value.trim();
   if(!name) return;
-  if(players.includes(name)){ showToast('Already in squad'); return; }
-  players.push(name);
-  persistPlayers();
+  if(fixtureRoster(activeSessionTeam).includes(name)){ showToast('Already in squad'); return; }
+  addFixtureRosterPlayer(activeSessionTeam, name);
   input.value = '';
   renderSessionPanel();
   showToast('Player added');
@@ -1896,7 +1981,7 @@ document.getElementById('saveSessionBtn').onclick = () => {
     trainerOfWeek: currentTrainer || null,
     notes: document.getElementById('sessionNotes').value.trim()
   };
-  sessions.push(session);
+  sessions[activeSessionTeam].push(session);
   persistSessions();
 
   drills.forEach(d=>{ d.inSession = false; });
@@ -2632,13 +2717,23 @@ function applyResultToLeague(team, f){
 }
 
 // ---- History ----
+document.querySelectorAll('#historySeg button').forEach(b=>{
+  b.onclick = () => {
+    activeHistoryTeam = b.dataset.val;
+    try{ localStorage.setItem('coachlog_history_active', activeHistoryTeam); }catch(e){}
+    renderHistory();
+  };
+});
+
 function renderHistory(){
+  document.querySelectorAll('#historySeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===activeHistoryTeam));
   const wrap = document.getElementById('historyList');
-  if(sessions.length === 0){
+  const list = sessions[activeHistoryTeam] || [];
+  if(list.length === 0){
     wrap.innerHTML = `<div class="empty"><h3>No sessions saved yet</h3><p>Build one in the Session tab, then save it here.</p></div>`;
     return;
   }
-  const sorted = sessions.slice().sort((a,b)=> b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const sorted = list.slice().sort((a,b)=> b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   wrap.innerHTML = sorted.map(s => {
     const drillNames = s.drillIds.map(id => { const d = drills.find(x=>x.id===id); return d ? d.name : null; }).filter(Boolean);
     const quick = (s.quickDrills || []);
@@ -2677,7 +2772,7 @@ function confirmHistoryDelete(id, cardEl){
   cardEl.appendChild(row);
   row.querySelector('.no').onclick = () => renderHistory();
   row.querySelector('.yes').onclick = () => {
-    sessions = sessions.filter(x=>x.id!==id);
+    sessions[activeHistoryTeam] = sessions[activeHistoryTeam].filter(x=>x.id!==id);
     persistSessions();
     showToast('Session deleted');
     renderHistory();
@@ -2711,22 +2806,34 @@ function summarySection(key, title, rowsHtml){
   `;
 }
 
+document.querySelectorAll('#summarySeg button').forEach(b=>{
+  b.onclick = () => {
+    activeSummaryTeam = b.dataset.val;
+    try{ localStorage.setItem('coachlog_summary_active', activeSummaryTeam); }catch(e){}
+    renderSummary();
+  };
+});
+
 function renderSummary(){
+  document.querySelectorAll('#summarySeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===activeSummaryTeam));
   const wrap = document.getElementById('summaryContent');
-  const playedGames = playedFixturesFor('meerkats');
-  if(sessions.length === 0 && playedGames.length === 0){
+  const roster = fixtureRoster(activeSummaryTeam);
+  const teamCoaches = coachesFor(activeSummaryTeam);
+  const teamSessions = sessions[activeSummaryTeam] || [];
+  const playedGames = playedFixturesFor(activeSummaryTeam);
+  if(teamSessions.length === 0 && playedGames.length === 0){
     wrap.innerHTML = `<div class="empty"><h3>No sessions or games yet</h3><p>Stats will show up here once you've saved a session or a game.</p></div>`;
     return;
   }
   let html = '';
 
-  if(sessions.length > 0){
-    const totalSessions = sessions.length;
-    const attendance = players.map(p => ({ name:p, n: sessions.filter(s=>s.attendance.includes(p)).length }))
+  if(teamSessions.length > 0){
+    const totalSessions = teamSessions.length;
+    const attendance = roster.map(p => ({ name:p, n: teamSessions.filter(s=>s.attendance.includes(p)).length }))
       .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
-    const totw = players.map(p => ({ name:p, n: sessions.filter(s=>s.trainerOfWeek===p).length }))
+    const totw = roster.map(p => ({ name:p, n: teamSessions.filter(s=>s.trainerOfWeek===p).length }))
       .sort((a,b)=> a.n-b.n || a.name.localeCompare(b.name));
-    const led = coaches.map(c => ({ name:c, n: sessions.filter(s=>s.leadCoach===c).length }))
+    const led = teamCoaches.map(c => ({ name:c, n: teamSessions.filter(s=>s.leadCoach===c).length }))
       .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
 
     html += summarySection('attendance', `Training Attendance (${totalSessions} session${totalSessions===1?'':'s'} logged)`,
@@ -2739,12 +2846,12 @@ function renderSummary(){
 
   if(playedGames.length > 0){
     const totalGames = playedGames.length;
-    const appearances = players.map(p => ({ name:p, n: playedGames.filter(g=>(g.squad||[]).includes(p)).length }))
+    const appearances = roster.map(p => ({ name:p, n: playedGames.filter(g=>(g.squad||[]).includes(p)).length }))
       .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
-    const goals = players.map(p => ({ name:p, n: playedGames.reduce((sum,g)=> sum + ((g.scorers && g.scorers[p]) || 0), 0) }))
+    const goals = roster.map(p => ({ name:p, n: playedGames.reduce((sum,g)=> sum + ((g.scorers && g.scorers[p]) || 0), 0) }))
       .filter(x=>x.n>0)
       .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
-    const potm = players.map(p => ({ name:p, n: playedGames.filter(g=>g.potm===p).length }))
+    const potm = roster.map(p => ({ name:p, n: playedGames.filter(g=>g.potm===p).length }))
       .sort((a,b)=> a.n-b.n || a.name.localeCompare(b.name));
 
     html += summarySection('appearances', `Match Appearances (${totalGames} game${totalGames===1?'':'s'} logged)`,
@@ -2778,6 +2885,7 @@ function init(){
   loadLeague();
   loadFixtures();
   loadPredsPlayers();
+  loadPredsCoaches();
   loadSummaryCollapsed();
   migrateLegacyGames();
   document.getElementById('sessionDate').value = todayISO();
