@@ -422,6 +422,34 @@
     width:32px; height:32px; flex:0 0 auto; border-radius:8px; border:1px solid var(--chalk-line);
     background: var(--chalk); color: var(--red); display:flex; align-items:center; justify-content:center; cursor:pointer;
   }
+
+  .timer-clock-wrap{
+    background: var(--pitch-dark); border-radius:16px; padding:18px; text-align:center; margin-bottom:6px;
+  }
+  .timer-clock{
+    font-family: var(--font-display); font-size:44px; font-weight:700; color:#fff; letter-spacing:1px; margin-bottom:14px;
+  }
+  .timer-clock-actions{ display:flex; gap:10px; }
+  .timer-row{
+    display:flex; align-items:center; gap:8px; padding:9px 4px; border-bottom:1px solid var(--chalk-line);
+  }
+  .timer-row:last-child{ border-bottom:none; }
+  .timer-row.on{ background: rgba(46,125,82,0.08); }
+  .timer-onoff{
+    flex-shrink:0; font-family: var(--font-display); font-size:11px; font-weight:700; letter-spacing:0.3px;
+    padding:7px 12px; border-radius:20px; border:none; cursor:pointer; min-width:52px; text-align:center;
+  }
+  .timer-onoff.is-on{ background: var(--pitch-mid); color:#fff; }
+  .timer-onoff.is-off{ background: var(--chalk-line); color: var(--ink-soft); }
+  .timer-row .timer-name{ flex:1; min-width:0; font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .timer-row select.timer-pos{
+    flex-shrink:0; font-family: var(--font-body); font-size:12.5px; padding:6px 6px; border-radius:8px;
+    border:1.5px solid var(--chalk-line); background:#fff; outline:none;
+  }
+  .timer-row .timer-time{
+    flex-shrink:0; width:52px; text-align:right; font-family: var(--font-display); font-weight:700; font-size:13px; color: var(--ink-soft);
+  }
+  .timer-row.on .timer-time{ color: var(--pitch-mid); }
 </style>
 </head>
 <body>
@@ -855,6 +883,27 @@ Collyhurst Youth JFC U15 Blue, 0, 0, 0, 0, 0"></textarea>
     <div class="sheet-actions" style="margin-top:16px;">
       <button class="btn btn-ghost" id="resultCancel">Cancel</button>
       <button class="btn btn-primary" id="resultSave">Save Result</button>
+    </div>
+  </div>
+</div>
+
+<!-- Match Timer sheet -->
+<div class="sheet-backdrop" id="timerBackdrop">
+  <div class="sheet" style="max-height:92vh;">
+    <div class="sheet-handle"></div>
+    <h2 id="timerSheetTitle">Match Timer</h2>
+    <div class="timer-clock-wrap">
+      <div class="timer-clock" id="timerClock">00:00</div>
+      <div class="timer-clock-actions">
+        <button class="btn btn-primary" id="timerStartPauseBtn" style="flex:1;">Start</button>
+        <button class="btn btn-ghost" id="timerResetBtn" title="Reset clock to zero">Reset</button>
+      </div>
+    </div>
+    <div class="hint" style="margin:10px 0 4px;">Tap a player On to start their stint, tap again to sub them Off. Change their position any time — it splits into a new stint with no time lost.</div>
+    <div id="timerPlayersList"></div>
+    <div class="sheet-actions" style="margin-top:16px;">
+      <button class="btn btn-ghost" id="timerCloseBtn">Save &amp; Close</button>
+      <button class="btn btn-danger" id="timerEndBtn">End Match</button>
     </div>
   </div>
 </div>
@@ -2458,6 +2507,8 @@ function renderFixtures(){
   }
   wrap.innerHTML = list.map(f=>{
     const scorersList = Object.entries(f.scorers||{}).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`${escapeHtml(n)}${c>1?' ('+c+')':''}`).join(', ');
+    const hasSquad = (f.squad||[]).length > 0;
+    const hasTimerData = f.timer && f.timer.stints && f.timer.stints.length > 0;
     return `
     <div class="fixture-card" data-id="${f.id}">
       <div class="fixture-top">
@@ -2469,12 +2520,14 @@ function renderFixtures(){
       <div class="fixture-meta">${f.date ? formatDate(f.date) : 'Date TBC'}${f.time ? ', '+escapeHtml(f.time) : ''}</div>
       ${f.venue ? `<div class="fixture-meta">${escapeHtml(f.venue)}</div>` : ''}
       ${f.competition ? `<div class="fixture-meta">${escapeHtml(f.competition)}</div>` : ''}
-      <div class="fixture-meta"><b>Squad:</b> ${(f.squad||[]).length ? (f.squad||[]).length+' selected' : 'not set'}</div>
+      <div class="fixture-meta"><b>Squad:</b> ${hasSquad ? (f.squad||[]).length+' selected' : 'not set'}</div>
       ${f.played ? `<div class="fixture-meta">${scorersList ? '<b>Scorers:</b> '+scorersList : ''}${f.potm ? ' · <b>POTW:</b> '+escapeHtml(f.potm) : ''}</div>` : ''}
+      ${hasTimerData ? `<div class="fixture-meta">${f.timer.running ? '⏱ Timer running' : (f.timer.finalized ? '⏱ Playing time logged' : '⏱ Timer paused, not finalised')}</div>` : ''}
       ${f.notes ? `<div class="gc-notes">${escapeHtml(f.notes)}</div>` : ''}
       <div class="fixture-actions">
         <button class="btn-mini fx-setup" data-id="${f.id}">Setup</button>
         <button class="btn-mini fx-squad" data-id="${f.id}">Squad</button>
+        <button class="btn-mini fx-timer" data-id="${f.id}" ${hasSquad ? '' : 'disabled style="opacity:.45;"'}>${hasTimerData ? 'Timer ▸' : 'Start Timer'}</button>
         <button class="btn-mini fx-result" data-id="${f.id}">${f.played ? 'Edit Result' : 'Record Result'}</button>
         <button class="fx-del" data-id="${f.id}" title="Delete">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
@@ -2485,6 +2538,7 @@ function renderFixtures(){
 
   wrap.querySelectorAll('.fx-setup').forEach(b=> b.onclick = () => openFixtureSetup(b.dataset.id));
   wrap.querySelectorAll('.fx-squad').forEach(b=> b.onclick = () => openFixtureSquad(b.dataset.id));
+  wrap.querySelectorAll('.fx-timer').forEach(b=> b.onclick = () => { if(!b.disabled) openTimerSheet(b.dataset.id); });
   wrap.querySelectorAll('.fx-result').forEach(b=> b.onclick = () => openFixtureResult(b.dataset.id));
   wrap.querySelectorAll('.fx-del').forEach(b=> b.onclick = () => deleteFixture(b.dataset.id));
 }
@@ -2716,6 +2770,210 @@ function applyResultToLeague(team, f){
   return true;
 }
 
+// ---- Match Timer ----
+// Tracks live on/off stints per player (with position) against wall-clock
+// time, so backgrounding the app doesn't lose accuracy. Feeds a "time on
+// pitch" fairness view in Summary.
+const TIMER_POSITIONS = ['GK','DEF','MID','FWD'];
+let timerFixtureId = null;
+let timerTickHandle = null;
+
+function formatClock(totalSeconds){
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const m = Math.floor(s/60);
+  const r = s%60;
+  return String(m).padStart(2,'0') + ':' + String(r).padStart(2,'0');
+}
+
+function ensureTimer(f){
+  if(!f.timer) f.timer = { running:false, accumulatedSeconds:0, lastStartedAt:null, stints:[], lastPosition:{}, finalized:false };
+  return f.timer;
+}
+
+function getElapsedSeconds(f){
+  const t = ensureTimer(f);
+  let sec = t.accumulatedSeconds || 0;
+  if(t.running && t.lastStartedAt) sec += (Date.now() - t.lastStartedAt) / 1000;
+  return sec;
+}
+
+function isPlayerOn(f, name){
+  return ensureTimer(f).stints.some(s => s.player===name && s.offSeconds==null);
+}
+
+function playerMatchSeconds(f, name){
+  const t = ensureTimer(f);
+  const nowSec = getElapsedSeconds(f);
+  return t.stints.filter(s=>s.player===name)
+    .reduce((sum,s)=> sum + ((s.offSeconds!=null ? s.offSeconds : nowSec) - s.onSeconds), 0);
+}
+
+function currentTimerFixture(){
+  if(!timerFixtureId) return null;
+  return (fixtures[activeFixtureTeam]||[]).find(x=>x.id===timerFixtureId) || null;
+}
+
+function toggleTimerRunning(){
+  const f = currentTimerFixture();
+  if(!f) return;
+  const t = ensureTimer(f);
+  if(t.running){
+    t.accumulatedSeconds = getElapsedSeconds(f);
+    t.running = false;
+    t.lastStartedAt = null;
+    stopTimerTick();
+  } else {
+    t.running = true;
+    t.lastStartedAt = Date.now();
+    startTimerTick();
+  }
+  persistFixtures();
+  renderTimerSheet();
+}
+
+function togglePlayerOnOff(name){
+  const f = currentTimerFixture();
+  if(!f) return;
+  const t = ensureTimer(f);
+  const nowSec = getElapsedSeconds(f);
+  const open = t.stints.find(s=>s.player===name && s.offSeconds==null);
+  if(open){
+    open.offSeconds = nowSec;
+  } else {
+    const pos = t.lastPosition[name] || TIMER_POSITIONS[0];
+    t.stints.push({ id:'st-'+Date.now()+'-'+Math.floor(Math.random()*1000), player:name, position:pos, onSeconds:nowSec, offSeconds:null });
+  }
+  persistFixtures();
+  renderTimerSheet();
+}
+
+function setPlayerPosition(name, newPosition){
+  const f = currentTimerFixture();
+  if(!f) return;
+  const t = ensureTimer(f);
+  t.lastPosition[name] = newPosition;
+  const open = t.stints.find(s=>s.player===name && s.offSeconds==null);
+  if(open && open.position !== newPosition){
+    const nowSec = getElapsedSeconds(f);
+    open.offSeconds = nowSec;
+    t.stints.push({ id:'st-'+Date.now()+'-'+Math.floor(Math.random()*1000), player:name, position:newPosition, onSeconds:nowSec, offSeconds:null });
+  }
+  persistFixtures();
+  renderTimerSheet();
+}
+
+function startTimerTick(){
+  stopTimerTick();
+  timerTickHandle = setInterval(renderTimerSheet, 1000);
+}
+function stopTimerTick(){
+  if(timerTickHandle){ clearInterval(timerTickHandle); timerTickHandle = null; }
+}
+
+function openTimerSheet(id){
+  const f = (fixtures[activeFixtureTeam]||[]).find(x=>x.id===id);
+  if(!f) return;
+  if((f.squad||[]).length === 0){ showToast('Select a squad first'); return; }
+  ensureTimer(f);
+  timerFixtureId = id;
+  document.getElementById('timerSheetTitle').textContent = 'Timer — ' + (f.opponent || 'Fixture');
+  renderTimerSheet();
+  document.getElementById('timerBackdrop').classList.add('open');
+  if(f.timer.running) startTimerTick();
+}
+
+function closeTimerSheet(){
+  stopTimerTick();
+  document.getElementById('timerBackdrop').classList.remove('open');
+  timerFixtureId = null;
+  renderFixtures();
+}
+
+function renderTimerSheet(){
+  const f = currentTimerFixture();
+  if(!f) return;
+  const t = ensureTimer(f);
+  document.getElementById('timerClock').textContent = formatClock(getElapsedSeconds(f));
+  const startBtn = document.getElementById('timerStartPauseBtn');
+  startBtn.textContent = t.running ? 'Pause' : (t.accumulatedSeconds > 0 ? 'Resume' : 'Start');
+
+  const wrap = document.getElementById('timerPlayersList');
+  const squad = f.squad || [];
+  wrap.innerHTML = `<div class="attend-list">` + squad.map(name=>{
+    const on = isPlayerOn(f, name);
+    const pos = t.lastPosition[name] || TIMER_POSITIONS[0];
+    const sec = playerMatchSeconds(f, name);
+    return `
+      <div class="timer-row ${on?'on':''}">
+        <button class="timer-onoff ${on?'is-on':'is-off'}" data-name="${escapeAttr(name)}">${on?'ON':'OFF'}</button>
+        <span class="timer-name">${escapeHtml(name)}</span>
+        <select class="timer-pos" data-name="${escapeAttr(name)}">
+          ${TIMER_POSITIONS.map(p=>`<option value="${p}" ${p===pos?'selected':''}>${p}</option>`).join('')}
+        </select>
+        <span class="timer-time">${formatClock(sec)}</span>
+      </div>
+    `;
+  }).join('') + `</div>`;
+
+  wrap.querySelectorAll('.timer-onoff').forEach(btn=>{
+    btn.onclick = () => togglePlayerOnOff(btn.dataset.name);
+  });
+  wrap.querySelectorAll('.timer-pos').forEach(sel=>{
+    sel.onchange = (e) => setPlayerPosition(sel.dataset.name, e.target.value);
+  });
+}
+
+document.getElementById('timerStartPauseBtn').onclick = () => toggleTimerRunning();
+document.getElementById('timerResetBtn').onclick = () => {
+  const f = currentTimerFixture();
+  if(!f) return;
+  f.timer = { running:false, accumulatedSeconds:0, lastStartedAt:null, stints:[], lastPosition:{}, finalized:false };
+  stopTimerTick();
+  persistFixtures();
+  renderTimerSheet();
+  showToast('Timer reset');
+};
+document.getElementById('timerCloseBtn').onclick = () => closeTimerSheet();
+document.getElementById('timerBackdrop').onclick = (e) => { if(e.target===document.getElementById('timerBackdrop')) closeTimerSheet(); };
+
+document.getElementById('timerEndBtn').onclick = () => {
+  const f = currentTimerFixture();
+  if(!f) return;
+  const t = ensureTimer(f);
+  const nowSec = getElapsedSeconds(f);
+  t.stints.forEach(s=>{ if(s.offSeconds==null) s.offSeconds = nowSec; });
+  t.accumulatedSeconds = nowSec;
+  t.running = false;
+  t.lastStartedAt = null;
+  t.finalized = true;
+  persistFixtures();
+  stopTimerTick();
+  document.getElementById('timerBackdrop').classList.remove('open');
+  timerFixtureId = null;
+  showToast(`Match ended — ${formatClock(nowSec)} logged. Don't forget to record the result.`, 6000);
+  renderFixtures();
+};
+
+// Aggregate tracked minutes across a team's finalised, timed matches — used
+// by Summary to highlight who needs more (or less) time on the pitch.
+function timeOnPitchStats(team){
+  const timedGames = (fixtures[team]||[]).filter(f => f.timer && f.timer.stints && f.timer.stints.length);
+  const roster = fixtureRoster(team);
+  return roster.map(p=>{
+    let totalSec = 0, gamesCounted = 0;
+    timedGames.forEach(f=>{
+      if((f.squad||[]).includes(p)){
+        gamesCounted++;
+        const endSec = f.timer.accumulatedSeconds || 0;
+        totalSec += f.timer.stints.filter(s=>s.player===p)
+          .reduce((sum,s)=> sum + ((s.offSeconds!=null ? s.offSeconds : endSec) - s.onSeconds), 0);
+      }
+    });
+    return { name:p, totalSec, gamesCounted, avgSec: gamesCounted ? totalSec/gamesCounted : 0 };
+  }).filter(x=>x.gamesCounted>0)
+    .sort((a,b)=> a.avgSec - b.avgSec);
+}
+
 // ---- History ----
 document.querySelectorAll('#historySeg button').forEach(b=>{
   b.onclick = () => {
@@ -2821,7 +3079,8 @@ function renderSummary(){
   const teamCoaches = coachesFor(activeSummaryTeam);
   const teamSessions = sessions[activeSummaryTeam] || [];
   const playedGames = playedFixturesFor(activeSummaryTeam);
-  if(teamSessions.length === 0 && playedGames.length === 0){
+  const timeStats = timeOnPitchStats(activeSummaryTeam);
+  if(teamSessions.length === 0 && playedGames.length === 0 && timeStats.length === 0){
     wrap.innerHTML = `<div class="empty"><h3>No sessions or games yet</h3><p>Stats will show up here once you've saved a session or a game.</p></div>`;
     return;
   }
@@ -2860,6 +3119,11 @@ function renderSummary(){
       goals.length ? goals.map(g => `<div class="summary-row"><span class="sr-name">${escapeHtml(g.name)}</span><span class="sr-val">${g.n}</span></div>`).join('') : `<div class="summary-row"><span class="sr-name">No goals logged yet</span></div>`);
     html += summarySection('potm', 'Player of the Week — least awarded first',
       potm.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join(''));
+  }
+
+  if(timeStats.length > 0){
+    html += summarySection('timeOnPitch', 'Time on Pitch — least average minutes first',
+      timeStats.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${Math.round(t.avgSec/60)} min avg (${t.gamesCounted} timed)</span></div>`).join(''));
   }
 
   wrap.innerHTML = html;
