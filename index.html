@@ -427,8 +427,17 @@
     background: var(--pitch-dark); border-radius:16px; padding:18px; text-align:center; margin-bottom:6px;
   }
   .timer-clock{
-    font-family: var(--font-display); font-size:44px; font-weight:700; color:#fff; letter-spacing:1px; margin-bottom:14px;
+    font-family: var(--font-display); font-size:44px; font-weight:700; color:#fff; letter-spacing:1px; margin-bottom:2px;
   }
+  .timer-clock.full-time{ color: var(--gold); }
+  .timer-clock-sub{ font-size:12px; color: rgba(255,255,255,0.65); margin-bottom:10px; min-height:15px; }
+  .timer-progress-track{
+    height:6px; border-radius:4px; background: rgba(255,255,255,0.15); overflow:hidden; margin-bottom:12px;
+  }
+  .timer-progress-fill{
+    height:100%; background: var(--gold); border-radius:4px; width:0%; transition: width 0.3s linear;
+  }
+  .timer-progress-fill.over{ background: var(--red); }
   .timer-clock-actions{ display:flex; gap:10px; }
   .timer-row{
     display:flex; align-items:center; gap:8px; padding:9px 4px; border-bottom:1px solid var(--chalk-line);
@@ -450,6 +459,49 @@
     flex-shrink:0; width:52px; text-align:right; font-family: var(--font-display); font-weight:700; font-size:13px; color: var(--ink-soft);
   }
   .timer-row.on .timer-time{ color: var(--pitch-mid); }
+
+  .timer-half{
+    background: rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); color:#fff;
+    font-family: var(--font-display); font-size:11px; font-weight:700; letter-spacing:0.3px;
+    padding:4px 12px; border-radius:20px; cursor:pointer; margin-bottom:8px;
+  }
+
+  .pitch-view{
+    position:relative; border-radius:14px; padding:14px 8px; margin:12px 0 10px;
+    min-height:230px; display:flex; flex-direction:column; justify-content:space-around; gap:10px;
+    background: linear-gradient(180deg, var(--pitch-light), var(--pitch-mid) 45%, var(--pitch-dark) 100%);
+    background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 34px, rgba(0,0,0,0.05) 34px 68px);
+    overflow:hidden;
+  }
+  .pitch-formation-badge{
+    position:absolute; top:10px; left:10px; background: rgba(0,0,0,0.35); color:#fff;
+    font-family: var(--font-display); font-size:11px; font-weight:700; padding:4px 9px; border-radius:6px; z-index:2;
+  }
+  .pitch-fairness{
+    position:absolute; top:8px; right:8px; background: rgba(0,0,0,0.35); color:#fff;
+    border-radius:10px; padding:6px 10px; text-align:center; z-index:2;
+  }
+  .pitch-fairness .pf-num{ font-family: var(--font-display); font-weight:700; font-size:17px; line-height:1; }
+  .pitch-fairness .pf-label{ font-size:8.5px; text-transform:uppercase; letter-spacing:0.3px; margin-top:2px; color: var(--gold); }
+  .pitch-fairness.uneven .pf-label{ color:#FFB4AC; }
+  .pitch-row{ display:flex; justify-content:space-evenly; align-items:center; flex-wrap:wrap; gap:6px; margin-top:22px; }
+  .pitch-row:first-of-type{ margin-top:30px; }
+  .pitch-blob{
+    width:54px; height:54px; border-radius:50%; background: linear-gradient(160deg, #3B6FD1, #2952A3);
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    color:#fff; font-family: var(--font-display); font-weight:700; font-size:11px; line-height:1.1;
+    border:2px solid rgba(255,255,255,0.55); box-shadow:0 2px 6px rgba(0,0,0,0.25); padding:2px; word-break:break-word;
+  }
+  .pitch-empty{ text-align:center; color: rgba(255,255,255,0.6); font-size:12.5px; padding:30px 0; }
+  .pitch-bench{
+    background: rgba(0,0,0,0.18); border-radius:12px; padding:10px 10px 8px;
+  }
+  .pitch-bench-label{
+    color: rgba(255,255,255,0.65); font-family: var(--font-display); font-size:10px;
+    text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;
+  }
+  .pitch-bench-blobs{ display:flex; flex-wrap:wrap; gap:8px; }
+  .pitch-blob.bench{ width:42px; height:42px; font-size:9.5px; background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.35); box-shadow:none; }
 </style>
 </head>
 <body>
@@ -823,6 +875,11 @@ Collyhurst Youth JFC U15 Blue, 0, 0, 0, 0, 0"></textarea>
       <label>Competition</label>
       <input id="fxCompetition" type="text" placeholder="e.g. EMJFL Division 1">
     </div>
+    <div class="field">
+      <label>Match length (mins, optional)</label>
+      <input id="fxMatchLength" type="number" min="0" placeholder="e.g. 70">
+      <div class="hint">Used by the Timer to show time remaining. Leave blank to just count up with no target.</div>
+    </div>
     <div class="used-toggle" style="margin-bottom:6px;">
       <input type="checkbox" id="fxFriendly">
       <span>Friendly (won't affect the League table)</span>
@@ -893,13 +950,19 @@ Collyhurst Youth JFC U15 Blue, 0, 0, 0, 0, 0"></textarea>
     <div class="sheet-handle"></div>
     <h2 id="timerSheetTitle">Match Timer</h2>
     <div class="timer-clock-wrap">
+      <button class="timer-half" id="timerHalf">1st Half</button>
       <div class="timer-clock" id="timerClock">00:00</div>
+      <div class="timer-clock-sub" id="timerClockSub"></div>
+      <div class="timer-progress-track" id="timerProgressTrack" style="display:none;">
+        <div class="timer-progress-fill" id="timerProgressFill"></div>
+      </div>
       <div class="timer-clock-actions">
         <button class="btn btn-primary" id="timerStartPauseBtn" style="flex:1;">Start</button>
         <button class="btn btn-ghost" id="timerResetBtn" title="Reset clock to zero">Reset</button>
       </div>
     </div>
-    <div class="hint" style="margin:10px 0 4px;">Tap a player On to start their stint, tap again to sub them Off. Change their position any time — it splits into a new stint with no time lost.</div>
+    <div id="pitchViewWrap"></div>
+    <div class="hint" style="margin:10px 0 4px;">Tap Pitch/Sub to swap a player on or off, tap again to reverse it. Change their position any time — it splits into a new stint with no time lost.</div>
     <div id="timerPlayersList"></div>
     <div class="sheet-actions" style="margin-top:16px;">
       <button class="btn btn-ghost" id="timerCloseBtn">Save &amp; Close</button>
@@ -2562,6 +2625,7 @@ function openFixtureSetup(id){
   document.getElementById('fxTime').value = f ? (f.time || '') : '';
   document.getElementById('fxVenue').value = f ? (f.venue || '') : '';
   document.getElementById('fxCompetition').value = f ? (f.competition || '') : defaultCompetition(activeFixtureTeam);
+  document.getElementById('fxMatchLength').value = f && f.matchLengthMins ? f.matchLengthMins : '';
   document.getElementById('fxFriendly').checked = f ? !!f.friendly : false;
   fxHomeAwayValue = f ? (f.homeAway || 'home') : 'home';
   document.querySelectorAll('#fxHomeAwaySeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===fxHomeAwayValue));
@@ -2576,6 +2640,7 @@ document.getElementById('fxSave').onclick = () => {
   const time = document.getElementById('fxTime').value.trim();
   const venue = document.getElementById('fxVenue').value.trim();
   const competition = document.getElementById('fxCompetition').value.trim();
+  const matchLengthMins = parseInt(document.getElementById('fxMatchLength').value, 10) || 0;
   const friendly = document.getElementById('fxFriendly').checked;
   const id = document.getElementById('fxId').value;
   if(!opponent){ showToast('Add an opponent'); return; }
@@ -2583,11 +2648,11 @@ document.getElementById('fxSave').onclick = () => {
   const list = fixtures[activeFixtureTeam];
   if(id){
     const f = list.find(x=>x.id===id);
-    if(f) Object.assign(f, { opponent, date, time, venue, competition, friendly, homeAway: fxHomeAwayValue });
+    if(f) Object.assign(f, { opponent, date, time, venue, competition, matchLengthMins, friendly, homeAway: fxHomeAwayValue });
   } else {
     list.push({
       id: 'fx-'+Date.now()+'-'+Math.floor(Math.random()*1000),
-      opponent, date, time, venue, competition, friendly, homeAway: fxHomeAwayValue,
+      opponent, date, time, venue, competition, matchLengthMins, friendly, homeAway: fxHomeAwayValue,
       squad: [], played: false, scoreUs: 0, scoreThem: 0, scorers: {}, potm: '', notes: '', leagueApplied: false
     });
   }
@@ -2786,8 +2851,13 @@ function formatClock(totalSeconds){
 }
 
 function ensureTimer(f){
-  if(!f.timer) f.timer = { running:false, accumulatedSeconds:0, lastStartedAt:null, stints:[], lastPosition:{}, finalized:false };
+  if(!f.timer) f.timer = { running:false, accumulatedSeconds:0, lastStartedAt:null, stints:[], lastPosition:{}, finalized:false, half:1 };
+  if(f.timer.half === undefined) f.timer.half = 1;
   return f.timer;
+}
+
+function firstName(name){
+  return (name||'').trim().split(/\s+/)[0] || name;
 }
 
 function getElapsedSeconds(f){
@@ -2889,13 +2959,88 @@ function closeTimerSheet(){
   renderFixtures();
 }
 
+document.getElementById('timerHalf').onclick = () => {
+  const f = currentTimerFixture();
+  if(!f) return;
+  const t = ensureTimer(f);
+  t.half = t.half === 1 ? 2 : 1;
+  persistFixtures();
+  renderTimerSheet();
+};
+
+function renderPitchView(f, t){
+  const squad = f.squad || [];
+  const rows = { FWD:[], MID:[], DEF:[], GK:[] };
+  squad.forEach(name=>{
+    if(!isPlayerOn(f, name)) return;
+    const pos = t.lastPosition[name] || 'MID';
+    (rows[pos] || rows.MID).push(name);
+  });
+  const bench = squad.filter(name => !isPlayerOn(f, name));
+  const onCount = rows.GK.length + rows.DEF.length + rows.MID.length + rows.FWD.length;
+  const formationLabel = onCount > 0 ? `${rows.GK.length}-${rows.DEF.length}-${rows.MID.length}-${rows.FWD.length}` : '—';
+
+  const blob = (name, cls) => `<div class="pitch-blob ${cls||''}">${escapeHtml(firstName(name))}</div>`;
+  const rowHtml = (names) => names.length ? `<div class="pitch-row">${names.map(n=>blob(n)).join('')}</div>` : '';
+
+  const secs = squad.map(p => playerMatchSeconds(f, p));
+  let fairnessHtml = '';
+  if(secs.length){
+    const avg = secs.reduce((a,b)=>a+b,0) / secs.length;
+    const spread = Math.max(...secs) - Math.min(...secs);
+    const uneven = spread > 300;
+    const label = uneven ? `±${Math.round(spread/60)}m spread` : 'Equal';
+    fairnessHtml = `<div class="pitch-fairness ${uneven?'uneven':''}"><div class="pf-num">${Math.round(avg/60)}</div><div class="pf-label">${label}</div></div>`;
+  }
+
+  return `
+    <div class="pitch-view">
+      <div class="pitch-formation-badge">${formationLabel}</div>
+      ${fairnessHtml}
+      ${onCount === 0
+        ? '<div class="pitch-empty">No one on the pitch yet — tap PITCH below to bring players on.</div>'
+        : rowHtml(rows.FWD) + rowHtml(rows.MID) + rowHtml(rows.DEF) + rowHtml(rows.GK)}
+    </div>
+    <div class="pitch-bench">
+      <div class="pitch-bench-label">Bench (${bench.length})</div>
+      <div class="pitch-bench-blobs">
+        ${bench.length ? bench.map(n=>blob(n,'bench')).join('') : '<span class="hint" style="color:rgba(255,255,255,0.6);">Everyone\'s on</span>'}
+      </div>
+    </div>
+  `;
+}
+
 function renderTimerSheet(){
   const f = currentTimerFixture();
   if(!f) return;
   const t = ensureTimer(f);
-  document.getElementById('timerClock').textContent = formatClock(getElapsedSeconds(f));
+  const elapsed = getElapsedSeconds(f);
+  const targetSec = (f.matchLengthMins || 0) * 60;
+  const clockEl = document.getElementById('timerClock');
+  clockEl.textContent = formatClock(elapsed);
+  document.getElementById('timerHalf').textContent = t.half === 1 ? '1st Half' : (t.half === 2 ? '2nd Half' : `Period ${t.half}`);
+
+  const subEl = document.getElementById('timerClockSub');
+  const track = document.getElementById('timerProgressTrack');
+  const fill = document.getElementById('timerProgressFill');
+  if(targetSec > 0){
+    const overBy = elapsed - targetSec;
+    subEl.textContent = overBy > 0 ? `+${formatClock(overBy)} over ${f.matchLengthMins} min` : `${formatClock(targetSec - elapsed)} remaining of ${f.matchLengthMins} min`;
+    track.style.display = 'block';
+    const pct = Math.min(100, (elapsed/targetSec)*100);
+    fill.style.width = pct + '%';
+    fill.classList.toggle('over', overBy > 0);
+    clockEl.classList.toggle('full-time', overBy >= 0);
+  } else {
+    subEl.textContent = '';
+    track.style.display = 'none';
+    clockEl.classList.remove('full-time');
+  }
+
   const startBtn = document.getElementById('timerStartPauseBtn');
   startBtn.textContent = t.running ? 'Pause' : (t.accumulatedSeconds > 0 ? 'Resume' : 'Start');
+
+  document.getElementById('pitchViewWrap').innerHTML = renderPitchView(f, t);
 
   const wrap = document.getElementById('timerPlayersList');
   const squad = f.squad || [];
@@ -2905,7 +3050,7 @@ function renderTimerSheet(){
     const sec = playerMatchSeconds(f, name);
     return `
       <div class="timer-row ${on?'on':''}">
-        <button class="timer-onoff ${on?'is-on':'is-off'}" data-name="${escapeAttr(name)}">${on?'ON':'OFF'}</button>
+        <button class="timer-onoff ${on?'is-on':'is-off'}" data-name="${escapeAttr(name)}">${on?'PITCH':'SUB'}</button>
         <span class="timer-name">${escapeHtml(name)}</span>
         <select class="timer-pos" data-name="${escapeAttr(name)}">
           ${TIMER_POSITIONS.map(p=>`<option value="${p}" ${p===pos?'selected':''}>${p}</option>`).join('')}
