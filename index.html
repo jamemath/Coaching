@@ -510,6 +510,12 @@
 </section>
 
 <section id="tab-games" class="tab-panel" style="display:none">
+  <div class="seg-row">
+    <div class="seg" id="gamesSeg">
+      <button data-val="preds">Preds</button>
+      <button data-val="meerkats" class="active">Meerkats</button>
+    </div>
+  </div>
   <div class="field">
     <label>Match date</label>
     <input type="date" id="gameDate">
@@ -959,6 +965,7 @@ let activeLeagueTeam = 'preds';
 let fixtures = { preds: [], meerkats: [] };
 let predsPlayers = [];
 let activeFixtureTeam = 'preds';
+let activeGamesTeam = 'meerkats';
 let editingFixtureId = null;
 let squadEditFixtureId = null;
 let squadDraft = [];
@@ -1114,6 +1121,7 @@ async function afterSignIn(){
     setSyncStatus('error');
   }
   loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs(); loadLeague(); loadFixtures(); loadPredsPlayers();
+  migrateLegacyGames();
   render();
 }
 
@@ -1353,6 +1361,10 @@ function loadFixtures(){
     const savedTeam = localStorage.getItem('coachlog_fixture_active');
     if(savedTeam === 'preds' || savedTeam === 'meerkats') activeFixtureTeam = savedTeam;
   }catch(e){}
+  try{
+    const savedGamesTeam = localStorage.getItem('coachlog_games_active');
+    if(savedGamesTeam === 'preds' || savedGamesTeam === 'meerkats') activeGamesTeam = savedGamesTeam;
+  }catch(e){}
 }
 function persistFixtures(){
   try{
@@ -1410,7 +1422,7 @@ function buildChips(){
 function updateCountPill(){
   if(activeTab==='drills') countPill.textContent = `${drills.length} drill${drills.length===1?'':'s'}`;
   else if(activeTab==='session') countPill.textContent = `${drills.filter(d=>d.inSession).length} queued`;
-  else if(activeTab==='games') countPill.textContent = `${games.length} game${games.length===1?'':'s'}`;
+  else if(activeTab==='games') countPill.textContent = `${playedFixturesFor(activeGamesTeam).length} game${playedFixturesFor(activeGamesTeam).length===1?'':'s'}`;
   else if(activeTab==='history') countPill.textContent = `${sessions.length} session${sessions.length===1?'':'s'}`;
   else if(activeTab==='summary') countPill.textContent = `${players.length} player${players.length===1?'':'s'}`;
   else if(activeTab==='documents') countPill.textContent = `${docs.length} link${docs.length===1?'':'s'}`;
@@ -1903,26 +1915,74 @@ document.getElementById('saveSessionBtn').onclick = () => {
 };
 
 // ---- Games builder ----
+// Games tab and Fixtures tab now share one store (fixtures[team]) so a
+// match created or edited in either place shows up in both, for either team.
+function playedFixturesFor(team){
+  return (fixtures[team] || []).filter(f => f.played);
+}
+
+// One-time move of anything logged under the old standalone Games list into
+// fixtures.meerkats, so history isn't lost when the two views were merged.
+// Marked leagueApplied so it can't double-count once a real league table is added.
+function migrateLegacyGames(){
+  try{
+    if(localStorage.getItem('coachlog_games_migrated')) return;
+    if(games && games.length){
+      const existingIds = new Set((fixtures.meerkats||[]).map(f=>f.id));
+      games.forEach(g=>{
+        const id = 'fx-legacy-' + g.id;
+        if(existingIds.has(id)) return;
+        fixtures.meerkats.push({
+          id, opponent: g.opponent || '', date: g.date, time: '', venue: '',
+          competition: defaultCompetition('meerkats'), friendly: false, homeAway: 'home',
+          squad: (g.players||[]).slice(), played: true,
+          scoreUs: g.scoreUs || 0, scoreThem: g.scoreThem || 0,
+          scorers: {...(g.scorers||{})}, potm: g.potm || '', notes: g.notes || '',
+          leagueApplied: true
+        });
+        existingIds.add(id);
+      });
+      persistFixtures();
+    }
+    localStorage.setItem('coachlog_games_migrated', '1');
+  }catch(e){ console.error('Legacy games migration failed', e); }
+}
+
+document.querySelectorAll('#gamesSeg button').forEach(b=>{
+  b.onclick = () => {
+    activeGamesTeam = b.dataset.val;
+    try{ localStorage.setItem('coachlog_games_active', activeGamesTeam); }catch(e){}
+    resetGameForm();
+    renderGamesPanel();
+  };
+});
+
 function renderGamesPanel(){
+  document.querySelectorAll('#gamesSeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===activeGamesTeam));
   const dateInput = document.getElementById('gameDate');
   if(!dateInput.value) dateInput.value = todayISO();
 
+  const roster = fixtureRoster(activeGamesTeam);
   const wrap = document.getElementById('gamePlayersList');
-  wrap.innerHTML = `<div class="attend-list">` + players.map(p=>{
-    const isIn = currentGamePlayers.includes(p);
-    const goals = currentGameScorers[p] || 0;
-    return `
-      <div class="attend-row">
-        <input type="checkbox" class="game-played-check" data-name="${escapeAttr(p)}" ${isIn ? 'checked' : ''}>
-        <span class="att-name">${escapeHtml(p)}</span>
-        <div class="goal-stepper" style="display:${isIn ? 'flex' : 'none'}">
-          <button class="g-minus" data-name="${escapeAttr(p)}">−</button>
-          <span class="g-count">${goals}</span>
-          <button class="g-plus" data-name="${escapeAttr(p)}">+</button>
+  if(roster.length === 0){
+    wrap.innerHTML = `<div class="empty"><h3>No players yet</h3><p>Add players via the Fixtures tab's Squad screen first.</p></div>`;
+  } else {
+    wrap.innerHTML = `<div class="attend-list">` + roster.map(p=>{
+      const isIn = currentGamePlayers.includes(p);
+      const goals = currentGameScorers[p] || 0;
+      return `
+        <div class="attend-row">
+          <input type="checkbox" class="game-played-check" data-name="${escapeAttr(p)}" ${isIn ? 'checked' : ''}>
+          <span class="att-name">${escapeHtml(p)}</span>
+          <div class="goal-stepper" style="display:${isIn ? 'flex' : 'none'}">
+            <button class="g-minus" data-name="${escapeAttr(p)}">−</button>
+            <span class="g-count">${goals}</span>
+            <button class="g-plus" data-name="${escapeAttr(p)}">+</button>
+          </div>
         </div>
-      </div>
-    `;
-  }).join('') + `</div>`;
+      `;
+    }).join('') + `</div>`;
+  }
 
   wrap.querySelectorAll('.game-played-check').forEach(chk=>{
     chk.onchange = () => {
@@ -1953,10 +2013,10 @@ function renderGamesPanel(){
   });
 
   const sel = document.getElementById('gamePotmSelect');
-  sel.innerHTML = `<option value="">— none yet —</option>` + players.map(p=>`<option value="${escapeAttr(p)}" ${currentGamePOTM===p?'selected':''}>${escapeHtml(p)}</option>`).join('');
+  sel.innerHTML = `<option value="">— none yet —</option>` + roster.map(p=>`<option value="${escapeAttr(p)}" ${currentGamePOTM===p?'selected':''}>${escapeHtml(p)}</option>`).join('');
 
   const tallyEl = document.getElementById('gamePotmTallyMini');
-  const counts = players.map(p => ({p, n: games.filter(g=>g.potm===p).length})).sort((a,b)=>a.n-b.n || a.p.localeCompare(b.p));
+  const counts = roster.map(p => ({p, n: playedFixturesFor(activeGamesTeam).filter(g=>g.potm===p).length})).sort((a,b)=>a.n-b.n || a.p.localeCompare(b.p));
   tallyEl.innerHTML = counts.length ? ('Least awarded so far: ' + counts.slice(0,3).map(c=>`<b>${escapeHtml(c.p)}</b> (${c.n})`).join(', ')) : '';
 
   document.getElementById('gameCancelEditBtn').style.display = editingGameId ? 'block' : 'none';
@@ -1965,7 +2025,7 @@ function renderGamesPanel(){
   renderGamesList();
 }
 
-document.getElementById('gamePlayersAllBtn').onclick = () => { currentGamePlayers = players.slice(); renderGamesPanel(); };
+document.getElementById('gamePlayersAllBtn').onclick = () => { currentGamePlayers = fixtureRoster(activeGamesTeam).slice(); renderGamesPanel(); };
 document.getElementById('gamePlayersNoneBtn').onclick = () => { currentGamePlayers = []; currentGameScorers = {}; renderGamesPanel(); };
 document.getElementById('gamePotmSelect').onchange = (e) => { currentGamePOTM = e.target.value; };
 
@@ -1994,44 +2054,65 @@ document.getElementById('saveGameBtn').onclick = () => {
     return;
   }
 
-  const gameData = {
-    date, opponent, scoreUs, scoreThem,
-    players: currentGamePlayers.slice(),
-    scorers: {...currentGameScorers},
-    potm: currentGamePOTM || null,
-    notes
-  };
+  const list = fixtures[activeGamesTeam];
+  let f = editingGameId ? list.find(x=>x.id===editingGameId) : null;
+  const alreadyApplied = f ? f.leagueApplied : false;
+  const isNew = !f;
 
-  if(editingGameId){
-    const idx = games.findIndex(g=>g.id===editingGameId);
-    if(idx>-1) games[idx] = { ...games[idx], ...gameData };
-    showToast('Game updated');
+  if(f){
+    f.date = date;
+    f.opponent = opponent;
+    f.scoreUs = scoreUs;
+    f.scoreThem = scoreThem;
+    f.squad = currentGamePlayers.slice();
+    f.scorers = {...currentGameScorers};
+    f.potm = currentGamePOTM || '';
+    f.notes = notes;
+    f.played = true;
   } else {
-    games.push({ id: 'g-'+Date.now(), ...gameData });
-    showToast('Game saved');
+    f = {
+      id: 'fx-'+Date.now()+'-'+Math.floor(Math.random()*1000),
+      opponent, date, time: '', venue: '', competition: defaultCompetition(activeGamesTeam),
+      friendly: false, homeAway: 'home',
+      squad: currentGamePlayers.slice(), played: true,
+      scoreUs, scoreThem, scorers: {...currentGameScorers},
+      potm: currentGamePOTM || '', notes, leagueApplied: false
+    };
+    list.push(f);
   }
-  persistGames();
+
+  let leagueMsg = '';
+  if(!f.friendly && !alreadyApplied){
+    const updated = applyResultToLeague(activeGamesTeam, f);
+    f.leagueApplied = true;
+    leagueMsg = updated ? ' — League table updated' : '';
+  }
+
+  persistFixtures();
+  showToast((isNew ? 'Game saved' : 'Game updated') + leagueMsg);
   resetGameForm();
   renderGamesPanel();
 };
 
 function renderGamesList(){
   const wrap = document.getElementById('gamesList');
-  if(games.length === 0){
-    wrap.innerHTML = `<div class="empty"><h3>No games logged yet</h3><p>Fill in the form above after your next match.</p></div>`;
+  const list = playedFixturesFor(activeGamesTeam);
+  if(list.length === 0){
+    wrap.innerHTML = `<div class="empty"><h3>No games logged yet</h3><p>Fill in the form above after your next match, or record a result from the Fixtures tab.</p></div>`;
     return;
   }
-  const sorted = games.slice().sort((a,b)=> b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const sorted = list.slice().sort((a,b)=> (b.date||'').localeCompare(a.date||'') || b.id.localeCompare(a.id));
   wrap.innerHTML = sorted.map(g => {
     const scorersList = Object.entries(g.scorers||{}).sort((a,b)=>b[1]-a[1])
       .map(([name,n]) => `${escapeHtml(name)}${n>1?` (${n})`:''}`).join(', ');
+    const squad = g.squad || [];
     return `
       <div class="game-card" data-id="${g.id}">
         <div class="gc-top">
           <div class="gc-title">${formatDate(g.date)}${g.opponent ? ' vs '+escapeHtml(g.opponent) : ''}</div>
           <div class="gc-score">${g.scoreUs}–${g.scoreThem}</div>
         </div>
-        <div class="gc-row"><b>Played:</b> ${g.players.length} — ${escapeHtml(g.players.join(', '))}</div>
+        <div class="gc-row"><b>Played:</b> ${squad.length} — ${escapeHtml(squad.join(', '))}</div>
         <div class="gc-row"><b>Scorers:</b> ${scorersList || '—'}</div>
         <div class="gc-row"><b>Player of the Week:</b> ${g.potm ? escapeHtml(g.potm) : '—'}</div>
         ${g.notes ? `<div class="gc-notes">${escapeHtml(g.notes)}</div>` : ''}
@@ -2055,10 +2136,10 @@ function renderGamesList(){
 }
 
 function openEditGame(id){
-  const g = games.find(x=>x.id===id);
+  const g = fixtures[activeGamesTeam].find(x=>x.id===id);
   if(!g) return;
   editingGameId = id;
-  currentGamePlayers = g.players.slice();
+  currentGamePlayers = (g.squad||[]).slice();
   currentGameScorers = {...(g.scorers||{})};
   currentGamePOTM = g.potm || '';
   document.getElementById('gameDate').value = g.date;
@@ -2081,8 +2162,8 @@ function confirmGameDelete(id, cardEl){
   cardEl.appendChild(row);
   row.querySelector('.no').onclick = () => renderGamesList();
   row.querySelector('.yes').onclick = () => {
-    games = games.filter(x=>x.id!==id);
-    persistGames();
+    fixtures[activeGamesTeam] = fixtures[activeGamesTeam].filter(x=>x.id!==id);
+    persistFixtures();
     if(editingGameId === id) resetGameForm();
     showToast('Game deleted');
     renderGamesPanel();
@@ -2632,7 +2713,8 @@ function summarySection(key, title, rowsHtml){
 
 function renderSummary(){
   const wrap = document.getElementById('summaryContent');
-  if(sessions.length === 0 && games.length === 0){
+  const playedGames = playedFixturesFor('meerkats');
+  if(sessions.length === 0 && playedGames.length === 0){
     wrap.innerHTML = `<div class="empty"><h3>No sessions or games yet</h3><p>Stats will show up here once you've saved a session or a game.</p></div>`;
     return;
   }
@@ -2655,14 +2737,14 @@ function renderSummary(){
       led.map(l => `<div class="summary-row"><span class="sr-name">${escapeHtml(l.name)}</span><span class="sr-val">${l.n}/${totalSessions}</span></div>`).join(''));
   }
 
-  if(games.length > 0){
-    const totalGames = games.length;
-    const appearances = players.map(p => ({ name:p, n: games.filter(g=>g.players.includes(p)).length }))
+  if(playedGames.length > 0){
+    const totalGames = playedGames.length;
+    const appearances = players.map(p => ({ name:p, n: playedGames.filter(g=>(g.squad||[]).includes(p)).length }))
       .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
-    const goals = players.map(p => ({ name:p, n: games.reduce((sum,g)=> sum + ((g.scorers && g.scorers[p]) || 0), 0) }))
+    const goals = players.map(p => ({ name:p, n: playedGames.reduce((sum,g)=> sum + ((g.scorers && g.scorers[p]) || 0), 0) }))
       .filter(x=>x.n>0)
       .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
-    const potm = players.map(p => ({ name:p, n: games.filter(g=>g.potm===p).length }))
+    const potm = players.map(p => ({ name:p, n: playedGames.filter(g=>g.potm===p).length }))
       .sort((a,b)=> a.n-b.n || a.name.localeCompare(b.name));
 
     html += summarySection('appearances', `Match Appearances (${totalGames} game${totalGames===1?'':'s'} logged)`,
@@ -2697,6 +2779,7 @@ function init(){
   loadFixtures();
   loadPredsPlayers();
   loadSummaryCollapsed();
+  migrateLegacyGames();
   document.getElementById('sessionDate').value = todayISO();
   document.getElementById('gameDate').value = todayISO();
   render();
