@@ -1281,7 +1281,7 @@ function invalidateToken(){
 async function sheetsPullAll(){
   if(!accessToken) return null;
   try{
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A2:B1000`, {
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A2:B`, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
     if(!res.ok){
@@ -3339,12 +3339,31 @@ function init(){
 document.getElementById('syncDot').onclick = async () => {
   if(!sheetsConfigured()){ showToast('Team sync not configured'); return; }
   if(!accessToken){ showToast('Sign in first'); return; }
-  SYNC_KEYS.forEach(k => { if(localStorage.getItem(k) !== null) markPending(k); });
   showToast('Resyncing…');
+  // Push only whatever this device actually has unsynced — never force-push
+  // every local key, since that would overwrite newer data from other
+  // devices with this device's stale copy.
   await flushPending();
-  if(pendingSync.size === 0){
-    const label = lastSyncedLabel();
-    showToast(label ? `Resync complete — ${label}` : 'Resync complete');
+  const remote = await sheetsPullAll();
+  if(remote){
+    SYNC_KEYS.forEach(k=>{
+      if(remote[k] !== undefined && remote[k] !== null && remote[k] !== '' && !pendingSync.has(k)){
+        localStorage.setItem(k, remote[k]);
+      }
+    });
+    loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs();
+    loadLeague(); loadFixtures(); loadPredsPlayers(); loadPredsCoaches();
+    migrateLegacyGames();
+    render();
+    setSyncStatus(pendingSync.size ? 'pending' : 'ok');
+    if(pendingSync.size === 0){
+      const label = lastSyncedLabel();
+      showToast(label ? `Resync complete — ${label}` : 'Resync complete');
+    } else {
+      showToast('Pulled latest — some local changes still pending');
+    }
+  } else {
+    setSyncStatus('error');
   }
 };
 
