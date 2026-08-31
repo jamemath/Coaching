@@ -368,6 +368,60 @@
     background: var(--chalk); display:flex; align-items:center; justify-content:center; cursor:pointer;
   }
   .doc-card .doc-actions .doc-del{ color: var(--red); }
+
+  .league-table{
+    background:#fff; border:1px solid var(--chalk-line); border-radius:14px;
+    overflow:hidden; margin-top:12px;
+  }
+  .league-head{
+    display:flex; align-items:center; padding:9px 12px;
+    background: var(--chalk); font-family: var(--font-display);
+    font-size:10.5px; font-weight:700; color: var(--ink-soft);
+    text-transform:uppercase; letter-spacing:0.4px;
+  }
+  .league-row{
+    display:flex; align-items:center; padding:10px 12px;
+    border-top:1px solid var(--chalk-line); font-size:13px; gap:2px;
+  }
+  .league-row.mine{
+    background: rgba(242,199,68,0.14); border-left:4px solid var(--gold-dark);
+    padding-left:8px;
+  }
+  .league-pos{ width:20px; flex-shrink:0; font-family: var(--font-display); font-weight:700; color: var(--ink-soft); font-size:12px; }
+  .league-star{
+    flex-shrink:0; width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; color: var(--chalk-line); background:none; border:none; padding:0;
+  }
+  .league-star.active{ color: var(--gold-dark); }
+  .league-team{ flex:1; min-width:0; padding-right:6px; font-weight:500; line-height:1.25; }
+  .league-row.mine .league-team{ font-weight:700; }
+  .league-stat{ width:22px; flex-shrink:0; text-align:center; color: var(--ink-soft); font-size:12.5px; }
+  .league-pts{ width:28px; flex-shrink:0; text-align:center; font-family: var(--font-display); font-weight:700; color: var(--pitch-mid); font-size:13px; }
+
+  .fixture-card{
+    background:#fff; border:1px solid var(--chalk-line); border-radius:14px; padding:12px 14px; margin-bottom:12px;
+  }
+  .fixture-top{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .fixture-ha{
+    font-family: var(--font-display); font-size:10.5px; font-weight:700; letter-spacing:0.4px;
+    padding:3px 9px; border-radius:20px; color:#fff;
+  }
+  .fixture-ha.home{ background: var(--pitch-mid); }
+  .fixture-ha.away{ background: var(--ink-soft); }
+  .fixture-friendly{
+    font-family: var(--font-display); font-size:10.5px; font-weight:700; letter-spacing:0.4px;
+    padding:3px 9px; border-radius:20px; background: var(--chalk); color: var(--ink-soft); border:1px solid var(--chalk-line);
+  }
+  .fixture-score{ margin-left:auto; font-family: var(--font-display); font-weight:700; font-size:18px; color: var(--pitch-mid); }
+  .fixture-opp{ font-weight:700; font-size:15.5px; margin-top:8px; color: var(--pitch-dark); }
+  .fixture-meta{ font-size:12.5px; color: var(--ink-soft); margin-top:3px; line-height:1.4; }
+  .fixture-meta b{ color: var(--ink); }
+  .fixture-actions{ display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  .fixture-actions .btn-mini{ flex:1; min-width:80px; text-align:center; }
+  .fixture-actions .fx-del{
+    width:32px; height:32px; flex:0 0 auto; border-radius:8px; border:1px solid var(--chalk-line);
+    background: var(--chalk); color: var(--red); display:flex; align-items:center; justify-content:center; cursor:pointer;
+  }
 </style>
 </head>
 <body>
@@ -515,6 +569,29 @@
   <div id="docsList"></div>
 </section>
 
+<section id="tab-league" class="tab-panel" style="display:none">
+  <div class="seg-row">
+    <div class="seg" id="leagueSeg">
+      <button data-val="preds" class="active">Preds</button>
+      <button data-val="meerkats">Meerkats</button>
+    </div>
+  </div>
+  <div id="leagueTableWrap"></div>
+  <button class="btn btn-ghost" id="leagueEditBtn" style="width:100%; margin-top:14px;">Edit / Paste Table</button>
+  <div class="hint" style="margin-top:8px;">Tap the star to highlight your own team. Position is worked out automatically from points — just re-paste the whole table whenever the league site updates.</div>
+</section>
+
+<section id="tab-fixtures" class="tab-panel" style="display:none">
+  <div class="seg-row">
+    <div class="seg" id="fixtureSeg">
+      <button data-val="preds" class="active">Preds</button>
+      <button data-val="meerkats">Meerkats</button>
+    </div>
+  </div>
+  <div id="fixturesList"></div>
+  <div class="hint" style="margin-top:8px;">Tap + to add a fixture. Setup edits the match details, Squad picks who's playing, and Record Result logs the score, scorers and Player of the Week — league results (non-friendly) update the League table automatically for your team and the opponent, if they're in it.</div>
+</section>
+
 <button class="fab" id="addFab" title="Add drill">
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
@@ -544,6 +621,14 @@
   <button data-tab="documents">
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
     <span>Docs</span>
+  </button>
+  <button data-tab="league">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M17 4h2.5a2.5 2.5 0 0 1 0 5H17"/><path d="M7 4H4.5a2.5 2.5 0 0 0 0 5H7"/><path d="M12 14v4"/><path d="M8 21h8"/></svg>
+    <span>League</span>
+  </button>
+  <button data-tab="fixtures">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <span>Fixtures</span>
   </button>
 </nav>
 
@@ -636,6 +721,120 @@
   </div>
 </div>
 
+<!-- League table bulk edit sheet -->
+<div class="sheet-backdrop" id="leagueBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="leagueEditTitle">Edit Table</h2>
+    <div class="field">
+      <label>One team per line — format: Team name, P, W, D, L, PTS</label>
+      <textarea id="leagueEditText" style="min-height:300px;" placeholder="AFC Urmston Meadowside U15 Predators, 0, 0, 0, 0, 0
+Collyhurst Youth JFC U15 Blue, 0, 0, 0, 0, 0"></textarea>
+      <div class="hint">Delete a line to remove a team, add a line for a new one. Re-paste the whole table any time the league site updates — order is recalculated by points automatically, so the numbers here don't need to be in any particular order.</div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="leagueEditCancel">Cancel</button>
+      <button class="btn btn-primary" id="leagueEditSave">Save Table</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fixture Setup sheet -->
+<div class="sheet-backdrop" id="fixtureBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="fixtureEditTitle">Add Fixture</h2>
+    <div class="field">
+      <label>Opponent</label>
+      <input id="fxOpponent" type="text" placeholder="e.g. Wythenshawe FC U12 Lynxes">
+    </div>
+    <div class="field">
+      <label>Date</label>
+      <input id="fxDate" type="date">
+    </div>
+    <div class="field">
+      <label>Kick-off time</label>
+      <input id="fxTime" type="text" placeholder="e.g. 09:30 am">
+    </div>
+    <div class="field">
+      <label>Home / Away</label>
+      <div class="seg" id="fxHomeAwaySeg">
+        <button data-val="home" class="active">Home</button>
+        <button data-val="away">Away</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Venue</label>
+      <input id="fxVenue" type="text" placeholder="e.g. Woodsend Park">
+    </div>
+    <div class="field">
+      <label>Competition</label>
+      <input id="fxCompetition" type="text" placeholder="e.g. EMJFL Division 1">
+    </div>
+    <div class="used-toggle" style="margin-bottom:6px;">
+      <input type="checkbox" id="fxFriendly">
+      <span>Friendly (won't affect the League table)</span>
+    </div>
+    <input type="hidden" id="fxId">
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="fxCancel">Cancel</button>
+      <button class="btn btn-primary" id="fxSave">Save Fixture</button>
+    </div>
+  </div>
+</div>
+
+<!-- Squad Select sheet -->
+<div class="sheet-backdrop" id="squadBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="squadSheetTitle">Select Squad</h2>
+    <div class="attend-actions">
+      <button class="btn-mini" id="squadAllBtn">Select all</button>
+      <button class="btn-mini" id="squadNoneBtn">Clear</button>
+    </div>
+    <div id="squadPlayersList"></div>
+    <div class="add-player-row">
+      <input type="text" id="newSquadPlayerName" placeholder="Add a player to the squad…">
+      <button id="addSquadPlayerBtn">Add</button>
+    </div>
+    <div class="sheet-actions" style="margin-top:16px;">
+      <button class="btn btn-ghost" id="squadCancel">Close</button>
+      <button class="btn btn-primary" id="squadSave">Save Squad</button>
+    </div>
+  </div>
+</div>
+
+<!-- Record Result sheet -->
+<div class="sheet-backdrop" id="resultBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="resultSheetTitle">Record Result</h2>
+    <h3 style="margin-top:0;">Score</h3>
+    <div class="score-row">
+      <div class="score-box">
+        <label>Us</label>
+        <input type="number" id="fxScoreUs" min="0" value="0">
+      </div>
+      <div class="score-sep">–</div>
+      <div class="score-box">
+        <label>Them</label>
+        <input type="number" id="fxScoreThem" min="0" value="0">
+      </div>
+    </div>
+    <h3>Scorers</h3>
+    <div class="hint" style="margin-top:-4px; margin-bottom:8px;">Only players in the squad show here — set the squad first if this list looks empty.</div>
+    <div id="resultScorersList"></div>
+    <h3>Player of the Week</h3>
+    <select id="fxPotmSelect"></select>
+    <h3>Notes</h3>
+    <textarea id="fxResultNotes" placeholder="Match report notes, standout moments…"></textarea>
+    <div class="sheet-actions" style="margin-top:16px;">
+      <button class="btn btn-ghost" id="resultCancel">Cancel</button>
+      <button class="btn btn-primary" id="resultSave">Save Result</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -717,6 +916,12 @@ const ROSTER_SEED = [
   'Poppy Mcfarlane','Poppy Jones','Rose Penza','Rosie Hogston','Tamsin Warren','Thea Hutchinson'
 ];
 
+const PREDS_ROSTER_SEED = [
+  'Ethan Winkley','Ethan Grogan','George Meachin','Isaac Leach','Jack Parker',
+  'James Olthof','James Cropper','James Dunn','Luca Higham','Lucan Goodyear',
+  'Max Hughes','Nate Tremeer','Oliver Byrne','Vincent Foster','Zac Cartner'
+];
+
 const COACHES_SEED = ['Jimmy', 'Scott', 'Dave', 'James'];
 
 const DOCS_SEED = [
@@ -725,12 +930,41 @@ const DOCS_SEED = [
   ['Team Fees (TeamFeePay)','https://app.teamfeepay.com/ca/afc-urmston-meadowside/teams/102914'],
 ].map((row,i) => ({ id:'doc-seed-'+i, name:row[0], url:row[1] }));
 
+// [name, mine] — P/W/D/L/PTS all start at 0 pre-season
+const LEAGUE_SEED_PREDS = [
+  ['AFC Urmston Meadowside U15 Predators', true],
+  ['Collyhurst Youth JFC U15 Blue', false],
+  ['Dukinfield Youth JFC U15 Whites', false],
+  ['Hazel Grove United FC U15 Hazel Grove Ut', false],
+  ['Manchester Dragons Community Junior Foot', false],
+  ['Northside U15 Reds', false],
+  ['R-Kix U15 Raiders', false],
+  ['Roach Dynamos U15 Sunday', false],
+  ['Rochdale Mayfield FC U15 Rochdale Mayfie', false],
+  ['Tintwistle Athletic U15', false],
+  ['Waterloo AFC U15', false],
+  ['Wythenshawe Celtic U15 Select', false],
+].map((row,i) => ({ id:'lg-preds-seed-'+i, name:row[0], p:0, w:0, d:0, l:0, pts:0, mine:row[1] }));
+
+const LEAGUE_SEED_MEERKATS = [];
+
 let drills = [];
 let players = [];
 let coaches = [];
 let sessions = [];
 let games = [];
 let docs = [];
+let leagueTables = { preds: [], meerkats: [] };
+let activeLeagueTeam = 'preds';
+let fixtures = { preds: [], meerkats: [] };
+let predsPlayers = [];
+let activeFixtureTeam = 'preds';
+let editingFixtureId = null;
+let squadEditFixtureId = null;
+let squadDraft = [];
+let resultEditFixtureId = null;
+let resultScorersDraft = {};
+let resultPotmDraft = '';
 let activeCategory = 'all';
 let searchTerm = '';
 let usedFilter = 'all';
@@ -765,7 +999,7 @@ const GOOGLE_CLIENT_ID = '15452691797-ecp1bs72429ol7nrueqvmjrgr3pv8m4j.apps.goog
 const SPREADSHEET_ID = '1VFWgZQowXyHJ0MBpWVMLkliyqN-rLjHfA8Ikwk6Scm8';
 const SHEET_TAB = 'Data';      // tab name inside that sheet
 
-const SYNC_KEYS = ['coachlog_drills','coachlog_players','coachlog_coaches','coachlog_sessions','coachlog_games','coachlog_docs'];
+const SYNC_KEYS = ['coachlog_drills','coachlog_players','coachlog_coaches','coachlog_sessions','coachlog_games','coachlog_docs','coachlog_league','coachlog_fixtures','coachlog_preds_players'];
 let pendingSync = new Set();
 try{ pendingSync = new Set(JSON.parse(localStorage.getItem('coachlog_pending_sync') || '[]')); }catch(e){}
 
@@ -862,7 +1096,7 @@ async function afterSignIn(){
   } else {
     setSyncStatus('error');
   }
-  loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs();
+  loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs(); loadLeague(); loadFixtures(); loadPredsPlayers();
   render();
 }
 
@@ -1063,6 +1297,74 @@ function persistDocs(){
   catch(e){ showToast('Save failed'); }
 }
 
+function loadLeague(){
+  try{
+    const raw = localStorage.getItem('coachlog_league');
+    if(raw){ leagueTables = JSON.parse(raw); }
+    else { leagueTables = { preds: LEAGUE_SEED_PREDS.slice(), meerkats: LEAGUE_SEED_MEERKATS.slice() }; persistLeague(); }
+  }catch(e){ leagueTables = { preds: LEAGUE_SEED_PREDS.slice(), meerkats: LEAGUE_SEED_MEERKATS.slice() }; }
+  if(!leagueTables.preds) leagueTables.preds = [];
+  if(!leagueTables.meerkats) leagueTables.meerkats = [];
+  try{
+    const savedTeam = localStorage.getItem('coachlog_league_active');
+    if(savedTeam === 'preds' || savedTeam === 'meerkats') activeLeagueTeam = savedTeam;
+  }catch(e){}
+}
+function persistLeague(){
+  try{
+    const raw = JSON.stringify(leagueTables);
+    localStorage.setItem('coachlog_league', raw);
+    pushKey('coachlog_league', raw);
+  }
+  catch(e){ showToast('Save failed'); }
+}
+
+function loadFixtures(){
+  try{
+    const raw = localStorage.getItem('coachlog_fixtures');
+    if(raw){ fixtures = JSON.parse(raw); }
+    else { fixtures = { preds: [], meerkats: [] }; persistFixtures(); }
+  }catch(e){ fixtures = { preds: [], meerkats: [] }; }
+  if(!fixtures.preds) fixtures.preds = [];
+  if(!fixtures.meerkats) fixtures.meerkats = [];
+  try{
+    const savedTeam = localStorage.getItem('coachlog_fixture_active');
+    if(savedTeam === 'preds' || savedTeam === 'meerkats') activeFixtureTeam = savedTeam;
+  }catch(e){}
+}
+function persistFixtures(){
+  try{
+    const raw = JSON.stringify(fixtures);
+    localStorage.setItem('coachlog_fixtures', raw);
+    pushKey('coachlog_fixtures', raw);
+  }
+  catch(e){ showToast('Save failed'); }
+}
+
+function loadPredsPlayers(){
+  try{
+    const raw = localStorage.getItem('coachlog_preds_players');
+    if(raw){ predsPlayers = JSON.parse(raw); }
+    else { predsPlayers = PREDS_ROSTER_SEED.slice(); persistPredsPlayers(); }
+  }catch(e){ predsPlayers = PREDS_ROSTER_SEED.slice(); }
+}
+function persistPredsPlayers(){
+  try{
+    const raw = JSON.stringify(predsPlayers);
+    localStorage.setItem('coachlog_preds_players', raw);
+    pushKey('coachlog_preds_players', raw);
+  }
+  catch(e){ showToast('Save failed'); }
+}
+function fixtureRoster(team){ return team==='preds' ? predsPlayers : players; }
+function addFixtureRosterPlayer(team, name){
+  if(team==='preds'){
+    if(!predsPlayers.includes(name)){ predsPlayers.push(name); persistPredsPlayers(); }
+  } else {
+    if(!players.includes(name)){ players.push(name); persistPlayers(); }
+  }
+}
+
 function buildChips(){
   chipRow.innerHTML = '';
   const counts = { all: drills.length };
@@ -1261,6 +1563,7 @@ function openEdit(d){
 }
 document.getElementById('addFab').onclick = () => {
   if(activeTab === 'documents') openAddDoc();
+  else if(activeTab === 'fixtures') openFixtureSetup(null);
   else openAdd();
 };
 document.getElementById('editCancel').onclick = () => editBackdrop.classList.remove('open');
@@ -1397,21 +1700,23 @@ document.getElementById('editAllSave').onclick = () => {
 };
 
 // ---- Tabs ----
-const TAB_TITLES = { drills:'Drill Library', session:"This Week's Session", games:'Match Games', history:'Session History', summary:'Squad Summary', documents:'Season Documents' };
+const TAB_TITLES = { drills:'Drill Library', session:"This Week's Session", games:'Match Games', history:'Session History', summary:'Squad Summary', documents:'Season Documents', league:'League Table', fixtures:'Fixtures' };
 function switchTab(tab){
   activeTab = tab;
-  ['drills','session','games','history','summary','documents'].forEach(t=>{
+  ['drills','session','games','history','summary','documents','league','fixtures'].forEach(t=>{
     document.getElementById('tab-'+t).style.display = (t===tab) ? 'block' : 'none';
   });
   document.getElementById('viewTitle').textContent = TAB_TITLES[tab];
   document.getElementById('searchRowWrap').style.display = tab==='drills' ? 'flex' : 'none';
-  document.getElementById('addFab').style.display = (tab==='drills' || tab==='documents') ? 'flex' : 'none';
+  document.getElementById('addFab').style.display = (tab==='drills' || tab==='documents' || tab==='fixtures') ? 'flex' : 'none';
   document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   if(tab==='session') renderSessionPanel();
   if(tab==='games') renderGamesPanel();
   if(tab==='history') renderHistory();
   if(tab==='summary') renderSummary();
   if(tab==='documents') renderDocs();
+  if(tab==='league') renderLeague();
+  if(tab==='fixtures') renderFixtures();
   updateCountPill();
 }
 document.querySelectorAll('#tabbar button').forEach(b=>{
@@ -1845,6 +2150,384 @@ document.getElementById('docSave').onclick = () => {
   renderDocs();
 };
 
+// ---- League ----
+function renderLeague(){
+  document.querySelectorAll('#leagueSeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===activeLeagueTeam));
+  const wrap = document.getElementById('leagueTableWrap');
+  const rows = (leagueTables[activeLeagueTeam] || []).slice();
+  if(rows.length === 0){
+    wrap.innerHTML = `<div class="empty"><h3>No table yet</h3><p>Tap "Edit / Paste Table" below to add teams.</p></div>`;
+    return;
+  }
+  rows.sort((a,b) => b.pts - a.pts);
+  let html = `<div class="league-table">
+    <div class="league-head">
+      <span class="league-pos">#</span>
+      <span style="width:22px;"></span>
+      <span class="league-team">Team</span>
+      <span class="league-stat">P</span>
+      <span class="league-stat">W</span>
+      <span class="league-stat">D</span>
+      <span class="league-stat">L</span>
+      <span class="league-pts">Pts</span>
+    </div>`;
+  rows.forEach((r,i)=>{
+    html += `<div class="league-row ${r.mine?'mine':''}" data-id="${r.id}">
+      <span class="league-pos">${i+1}</span>
+      <button class="league-star ${r.mine?'active':''}" data-id="${r.id}" title="Mark as my team">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="${r.mine?'currentColor':'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      </button>
+      <span class="league-team">${escapeHtml(r.name)}</span>
+      <span class="league-stat">${r.p}</span>
+      <span class="league-stat">${r.w}</span>
+      <span class="league-stat">${r.d}</span>
+      <span class="league-stat">${r.l}</span>
+      <span class="league-pts">${r.pts}</span>
+    </div>`;
+  });
+  html += `</div>`;
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll('.league-star').forEach(btn=>{
+    btn.onclick = () => {
+      const id = btn.dataset.id;
+      const list = leagueTables[activeLeagueTeam];
+      list.forEach(r => { r.mine = (r.id===id) ? !r.mine : false; });
+      persistLeague();
+      renderLeague();
+    };
+  });
+}
+
+document.querySelectorAll('#leagueSeg button').forEach(b=>{
+  b.onclick = () => {
+    activeLeagueTeam = b.dataset.val;
+    try{ localStorage.setItem('coachlog_league_active', activeLeagueTeam); }catch(e){}
+    renderLeague();
+  };
+});
+
+const leagueBackdrop = document.getElementById('leagueBackdrop');
+const leagueEditText = document.getElementById('leagueEditText');
+const leagueEditTitle = document.getElementById('leagueEditTitle');
+
+function rowsToLeagueText(rows){
+  return rows.map(r => `${r.name}, ${r.p}, ${r.w}, ${r.d}, ${r.l}, ${r.pts}`).join('\n');
+}
+function parseLeagueText(text){
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  const oldRows = leagueTables[activeLeagueTeam] || [];
+  return lines.map((line, i) => {
+    const parts = line.split(',').map(p=>p.trim());
+    const name = parts[0] || `Team ${i+1}`;
+    const nums = parts.slice(1).map(p => parseInt(p,10) || 0);
+    const [p=0, w=0, d=0, l=0, pts=0] = nums;
+    const existing = oldRows.find(r => r.name.toLowerCase() === name.toLowerCase());
+    return {
+      id: existing ? existing.id : 'lg-'+Date.now()+'-'+i+'-'+Math.floor(Math.random()*1000),
+      name, p, w, d, l, pts,
+      mine: existing ? existing.mine : false
+    };
+  });
+}
+
+document.getElementById('leagueEditBtn').onclick = () => {
+  leagueEditTitle.textContent = 'Edit ' + (activeLeagueTeam==='preds' ? 'Preds' : 'Meerkats') + ' Table';
+  leagueEditText.value = rowsToLeagueText(leagueTables[activeLeagueTeam] || []);
+  leagueBackdrop.classList.add('open');
+};
+document.getElementById('leagueEditCancel').onclick = () => leagueBackdrop.classList.remove('open');
+leagueBackdrop.onclick = (e) => { if(e.target === leagueBackdrop) leagueBackdrop.classList.remove('open'); };
+document.getElementById('leagueEditSave').onclick = () => {
+  const rows = parseLeagueText(leagueEditText.value);
+  leagueTables[activeLeagueTeam] = rows;
+  persistLeague();
+  leagueBackdrop.classList.remove('open');
+  showToast('Table saved');
+  renderLeague();
+};
+
+// ---- Fixtures ----
+document.querySelectorAll('#fixtureSeg button').forEach(b=>{
+  b.onclick = () => {
+    activeFixtureTeam = b.dataset.val;
+    try{ localStorage.setItem('coachlog_fixture_active', activeFixtureTeam); }catch(e){}
+    renderFixtures();
+  };
+});
+
+function defaultCompetition(team){
+  return team==='preds' ? 'EMJFL Division 1' : 'South Manchester Girls Football League';
+}
+
+function renderFixtures(){
+  document.querySelectorAll('#fixtureSeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===activeFixtureTeam));
+  const wrap = document.getElementById('fixturesList');
+  const list = (fixtures[activeFixtureTeam]||[]).slice().sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+  if(list.length === 0){
+    wrap.innerHTML = `<div class="empty"><h3>No fixtures yet</h3><p>Tap + to add your next match.</p></div>`;
+    return;
+  }
+  wrap.innerHTML = list.map(f=>{
+    const scorersList = Object.entries(f.scorers||{}).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`${escapeHtml(n)}${c>1?' ('+c+')':''}`).join(', ');
+    return `
+    <div class="fixture-card" data-id="${f.id}">
+      <div class="fixture-top">
+        <span class="fixture-ha ${f.homeAway==='away'?'away':'home'}">${f.homeAway==='away'?'AWAY':'HOME'}</span>
+        ${f.friendly ? '<span class="fixture-friendly">Friendly</span>' : ''}
+        ${f.played ? `<span class="fixture-score">${f.scoreUs}–${f.scoreThem}</span>` : ''}
+      </div>
+      <div class="fixture-opp">${escapeHtml(f.opponent || 'Opponent TBC')}</div>
+      <div class="fixture-meta">${f.date ? formatDate(f.date) : 'Date TBC'}${f.time ? ', '+escapeHtml(f.time) : ''}</div>
+      ${f.venue ? `<div class="fixture-meta">${escapeHtml(f.venue)}</div>` : ''}
+      ${f.competition ? `<div class="fixture-meta">${escapeHtml(f.competition)}</div>` : ''}
+      <div class="fixture-meta"><b>Squad:</b> ${(f.squad||[]).length ? (f.squad||[]).length+' selected' : 'not set'}</div>
+      ${f.played ? `<div class="fixture-meta">${scorersList ? '<b>Scorers:</b> '+scorersList : ''}${f.potm ? ' · <b>POTW:</b> '+escapeHtml(f.potm) : ''}</div>` : ''}
+      ${f.notes ? `<div class="gc-notes">${escapeHtml(f.notes)}</div>` : ''}
+      <div class="fixture-actions">
+        <button class="btn-mini fx-setup" data-id="${f.id}">Setup</button>
+        <button class="btn-mini fx-squad" data-id="${f.id}">Squad</button>
+        <button class="btn-mini fx-result" data-id="${f.id}">${f.played ? 'Edit Result' : 'Record Result'}</button>
+        <button class="fx-del" data-id="${f.id}" title="Delete">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+
+  wrap.querySelectorAll('.fx-setup').forEach(b=> b.onclick = () => openFixtureSetup(b.dataset.id));
+  wrap.querySelectorAll('.fx-squad').forEach(b=> b.onclick = () => openFixtureSquad(b.dataset.id));
+  wrap.querySelectorAll('.fx-result').forEach(b=> b.onclick = () => openFixtureResult(b.dataset.id));
+  wrap.querySelectorAll('.fx-del').forEach(b=> b.onclick = () => deleteFixture(b.dataset.id));
+}
+
+// -- Fixture setup sheet --
+let fxHomeAwayValue = 'home';
+document.querySelectorAll('#fxHomeAwaySeg button').forEach(b=>{
+  b.onclick = () => {
+    fxHomeAwayValue = b.dataset.val;
+    document.querySelectorAll('#fxHomeAwaySeg button').forEach(x=>x.classList.toggle('active', x===b));
+  };
+});
+
+function openFixtureSetup(id){
+  const list = fixtures[activeFixtureTeam];
+  const f = id ? list.find(x=>x.id===id) : null;
+  document.getElementById('fixtureEditTitle').textContent = f ? 'Edit Fixture' : 'Add Fixture';
+  document.getElementById('fxId').value = f ? f.id : '';
+  document.getElementById('fxOpponent').value = f ? f.opponent : '';
+  document.getElementById('fxDate').value = f ? f.date : todayISO();
+  document.getElementById('fxTime').value = f ? (f.time || '') : '';
+  document.getElementById('fxVenue').value = f ? (f.venue || '') : '';
+  document.getElementById('fxCompetition').value = f ? (f.competition || '') : defaultCompetition(activeFixtureTeam);
+  document.getElementById('fxFriendly').checked = f ? !!f.friendly : false;
+  fxHomeAwayValue = f ? (f.homeAway || 'home') : 'home';
+  document.querySelectorAll('#fxHomeAwaySeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===fxHomeAwayValue));
+  document.getElementById('fixtureBackdrop').classList.add('open');
+}
+document.getElementById('fxCancel').onclick = () => document.getElementById('fixtureBackdrop').classList.remove('open');
+document.getElementById('fixtureBackdrop').onclick = (e) => { if(e.target===document.getElementById('fixtureBackdrop')) document.getElementById('fixtureBackdrop').classList.remove('open'); };
+
+document.getElementById('fxSave').onclick = () => {
+  const opponent = document.getElementById('fxOpponent').value.trim();
+  const date = document.getElementById('fxDate').value || todayISO();
+  const time = document.getElementById('fxTime').value.trim();
+  const venue = document.getElementById('fxVenue').value.trim();
+  const competition = document.getElementById('fxCompetition').value.trim();
+  const friendly = document.getElementById('fxFriendly').checked;
+  const id = document.getElementById('fxId').value;
+  if(!opponent){ showToast('Add an opponent'); return; }
+
+  const list = fixtures[activeFixtureTeam];
+  if(id){
+    const f = list.find(x=>x.id===id);
+    if(f) Object.assign(f, { opponent, date, time, venue, competition, friendly, homeAway: fxHomeAwayValue });
+  } else {
+    list.push({
+      id: 'fx-'+Date.now()+'-'+Math.floor(Math.random()*1000),
+      opponent, date, time, venue, competition, friendly, homeAway: fxHomeAwayValue,
+      squad: [], played: false, scoreUs: 0, scoreThem: 0, scorers: {}, potm: '', notes: '', leagueApplied: false
+    });
+  }
+  persistFixtures();
+  document.getElementById('fixtureBackdrop').classList.remove('open');
+  showToast('Fixture saved');
+  renderFixtures();
+};
+
+function deleteFixture(id){
+  const card = document.querySelector(`.fixture-card[data-id="${id}"]`);
+  if(!card) return;
+  card.innerHTML = `<div class="confirm-row"><span>Delete this fixture?</span><button class="no">Cancel</button><button class="yes">Delete</button></div>`;
+  card.querySelector('.no').onclick = () => renderFixtures();
+  card.querySelector('.yes').onclick = () => {
+    fixtures[activeFixtureTeam] = fixtures[activeFixtureTeam].filter(x=>x.id!==id);
+    persistFixtures();
+    showToast('Fixture deleted');
+    renderFixtures();
+  };
+}
+
+// -- Squad select sheet --
+function openFixtureSquad(id){
+  squadEditFixtureId = id;
+  const f = fixtures[activeFixtureTeam].find(x=>x.id===id);
+  if(!f) return;
+  squadDraft = (f.squad || []).slice();
+  document.getElementById('squadSheetTitle').textContent = 'Squad — ' + (f.opponent || 'Fixture');
+  renderSquadSheet();
+  document.getElementById('squadBackdrop').classList.add('open');
+}
+function renderSquadSheet(){
+  const roster = fixtureRoster(activeFixtureTeam);
+  const wrap = document.getElementById('squadPlayersList');
+  if(roster.length === 0){
+    wrap.innerHTML = `<div class="empty"><h3>No players yet</h3><p>Add players below to build the squad list.</p></div>`;
+  } else {
+    wrap.innerHTML = `<div class="attend-list">` + roster.map(p=>{
+      const checked = squadDraft.includes(p) ? 'checked' : '';
+      return `<div class="attend-row"><input type="checkbox" class="squad-check" data-name="${escapeAttr(p)}" ${checked}><span class="att-name">${escapeHtml(p)}</span></div>`;
+    }).join('') + `</div>`;
+  }
+  wrap.querySelectorAll('.squad-check').forEach(chk=>{
+    chk.onchange = () => {
+      const name = chk.dataset.name;
+      if(chk.checked){ if(!squadDraft.includes(name)) squadDraft.push(name); }
+      else { squadDraft = squadDraft.filter(n=>n!==name); }
+    };
+  });
+}
+document.getElementById('squadAllBtn').onclick = () => { squadDraft = fixtureRoster(activeFixtureTeam).slice(); renderSquadSheet(); };
+document.getElementById('squadNoneBtn').onclick = () => { squadDraft = []; renderSquadSheet(); };
+document.getElementById('addSquadPlayerBtn').onclick = () => {
+  const input = document.getElementById('newSquadPlayerName');
+  const name = input.value.trim();
+  if(!name) return;
+  addFixtureRosterPlayer(activeFixtureTeam, name);
+  if(!squadDraft.includes(name)) squadDraft.push(name);
+  input.value = '';
+  renderSquadSheet();
+};
+document.getElementById('squadCancel').onclick = () => document.getElementById('squadBackdrop').classList.remove('open');
+document.getElementById('squadBackdrop').onclick = (e) => { if(e.target===document.getElementById('squadBackdrop')) document.getElementById('squadBackdrop').classList.remove('open'); };
+document.getElementById('squadSave').onclick = () => {
+  const f = fixtures[activeFixtureTeam].find(x=>x.id===squadEditFixtureId);
+  if(f){
+    f.squad = squadDraft.slice();
+    if(f.scorers){ Object.keys(f.scorers).forEach(n=>{ if(!f.squad.includes(n)) delete f.scorers[n]; }); }
+    if(f.potm && !f.squad.includes(f.potm)) f.potm = '';
+    persistFixtures();
+  }
+  document.getElementById('squadBackdrop').classList.remove('open');
+  showToast('Squad saved');
+  renderFixtures();
+};
+
+// -- Result sheet --
+function openFixtureResult(id){
+  const f = fixtures[activeFixtureTeam].find(x=>x.id===id);
+  if(!f) return;
+  if((f.squad||[]).length === 0){ showToast('Select a squad first'); return; }
+  resultEditFixtureId = id;
+  document.getElementById('resultSheetTitle').textContent = (f.played ? 'Edit Result — ' : 'Record Result — ') + (f.opponent || 'Fixture');
+  document.getElementById('fxScoreUs').value = f.scoreUs || 0;
+  document.getElementById('fxScoreThem').value = f.scoreThem || 0;
+  document.getElementById('fxResultNotes').value = f.notes || '';
+  resultScorersDraft = {...(f.scorers||{})};
+  resultPotmDraft = f.potm || '';
+  renderResultSheet(f);
+  document.getElementById('resultBackdrop').classList.add('open');
+}
+function renderResultSheet(f){
+  const wrap = document.getElementById('resultScorersList');
+  const squad = f.squad || [];
+  wrap.innerHTML = `<div class="attend-list">` + squad.map(p=>{
+    const goals = resultScorersDraft[p] || 0;
+    return `
+      <div class="attend-row">
+        <span class="att-name">${escapeHtml(p)}</span>
+        <div class="goal-stepper" style="display:flex;">
+          <button class="rs-minus" data-name="${escapeAttr(p)}">−</button>
+          <span class="g-count">${goals}</span>
+          <button class="rs-plus" data-name="${escapeAttr(p)}">+</button>
+        </div>
+      </div>
+    `;
+  }).join('') + `</div>`;
+  wrap.querySelectorAll('.rs-plus').forEach(btn=>{
+    btn.onclick = () => { resultScorersDraft[btn.dataset.name] = (resultScorersDraft[btn.dataset.name]||0) + 1; renderResultSheet(f); };
+  });
+  wrap.querySelectorAll('.rs-minus').forEach(btn=>{
+    btn.onclick = () => {
+      const n = Math.max(0, (resultScorersDraft[btn.dataset.name]||0) - 1);
+      if(n===0) delete resultScorersDraft[btn.dataset.name]; else resultScorersDraft[btn.dataset.name] = n;
+      renderResultSheet(f);
+    };
+  });
+  const sel = document.getElementById('fxPotmSelect');
+  sel.innerHTML = `<option value="">— none yet —</option>` + squad.map(p=>`<option value="${escapeAttr(p)}" ${resultPotmDraft===p?'selected':''}>${escapeHtml(p)}</option>`).join('');
+  sel.onchange = (e) => { resultPotmDraft = e.target.value; };
+}
+document.getElementById('resultCancel').onclick = () => document.getElementById('resultBackdrop').classList.remove('open');
+document.getElementById('resultBackdrop').onclick = (e) => { if(e.target===document.getElementById('resultBackdrop')) document.getElementById('resultBackdrop').classList.remove('open'); };
+
+document.getElementById('resultSave').onclick = () => {
+  const f = fixtures[activeFixtureTeam].find(x=>x.id===resultEditFixtureId);
+  if(!f) return;
+  const scoreUs = parseInt(document.getElementById('fxScoreUs').value, 10) || 0;
+  const scoreThem = parseInt(document.getElementById('fxScoreThem').value, 10) || 0;
+  const notes = document.getElementById('fxResultNotes').value.trim();
+
+  const alreadyApplied = f.leagueApplied;
+  f.scoreUs = scoreUs;
+  f.scoreThem = scoreThem;
+  f.scorers = {...resultScorersDraft};
+  f.potm = resultPotmDraft || '';
+  f.notes = notes;
+  f.played = true;
+
+  let leagueMsg = '';
+  if(!f.friendly && !alreadyApplied){
+    const updated = applyResultToLeague(activeFixtureTeam, f);
+    f.leagueApplied = true;
+    leagueMsg = updated ? ' — League table updated' : '';
+  }
+
+  persistFixtures();
+  document.getElementById('resultBackdrop').classList.remove('open');
+  showToast((alreadyApplied ? 'Result updated' : 'Result saved') + leagueMsg);
+  renderFixtures();
+};
+
+function applyResultToLeague(team, f){
+  const rows = leagueTables[team];
+  if(!rows || rows.length === 0) return false;
+  const mine = rows.find(r=>r.mine);
+  const oppName = (f.opponent||'').trim().toLowerCase();
+  const opp = oppName ? rows.find(r=>{
+    const rn = r.name.trim().toLowerCase();
+    return rn === oppName || rn.includes(oppName) || oppName.includes(rn);
+  }) : null;
+  if(!mine && !opp) return false;
+
+  const outcome = f.scoreUs > f.scoreThem ? 'win' : (f.scoreUs === f.scoreThem ? 'draw' : 'loss');
+
+  if(mine){
+    mine.p += 1;
+    if(outcome==='win'){ mine.w += 1; mine.pts += 3; }
+    else if(outcome==='draw'){ mine.d += 1; mine.pts += 1; }
+    else { mine.l += 1; }
+  }
+  if(opp && opp !== mine){
+    opp.p += 1;
+    if(outcome==='win'){ opp.l += 1; }
+    else if(outcome==='draw'){ opp.d += 1; opp.pts += 1; }
+    else { opp.w += 1; opp.pts += 3; }
+  }
+  persistLeague();
+  return true;
+}
+
 // ---- History ----
 function renderHistory(){
   const wrap = document.getElementById('historyList');
@@ -1988,6 +2671,9 @@ function init(){
   loadSessions();
   loadGames();
   loadDocs();
+  loadLeague();
+  loadFixtures();
+  loadPredsPlayers();
   loadSummaryCollapsed();
   document.getElementById('sessionDate').value = todayISO();
   document.getElementById('gameDate').value = todayISO();
