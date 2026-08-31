@@ -306,22 +306,27 @@
   .history-card .hc-row b{ color: var(--ink); }
   .history-card .hc-notes{ margin-top:8px; font-size:13.5px; background: var(--chalk); border-radius:8px; padding:8px 10px; }
 
-  .summary-table{ background:#fff; border:1px solid var(--chalk-line); border-radius:12px; overflow:hidden; margin-bottom:20px; }
+  .summary-table{ background:#fff; border:1px solid var(--chalk-line); border-top:none; border-radius:0 0 12px 12px; overflow:hidden; }
   .summary-row{ display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--chalk-line); }
   .summary-row:last-child{ border-bottom:none; }
   .summary-row .sr-name{ font-size:14px; font-weight:500; }
   .summary-row .sr-val{ font-family: var(--font-display); font-weight:700; color: var(--pitch-mid); font-size:14px; }
 
-  .summary-section{ margin: 18px 0; }
+  .summary-section{ margin: 14px 0; }
   .summary-section:first-child{ margin-top:4px; }
   .summary-toggle{
     width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px;
-    background:none; border:none; padding:0 0 8px; cursor:pointer; text-align:left;
+    background:#fff; border:1px solid var(--chalk-line); border-radius:12px; padding:12px 14px; cursor:pointer; text-align:left;
     font-family: var(--font-display); text-transform:uppercase; font-size:13px; letter-spacing:0.4px;
     color: var(--pitch-dark); font-weight:700;
   }
+  .summary-toggle:active{ background: var(--chalk); }
+  .summary-toggle.is-collapsed{ border-radius:12px; }
+  .summary-toggle:not(.is-collapsed){ border-radius:12px 12px 0 0; border-bottom:none; }
   .summary-toggle .chev{ transition: transform 0.15s; color: var(--ink-soft); flex-shrink:0; }
   .summary-toggle .chev.collapsed{ transform: rotate(-90deg); }
+  .summary-quick-actions{ display:flex; gap:8px; margin-bottom:14px; }
+  .summary-quick-actions .btn-mini{ flex:1; text-align:center; }
 
   .score-row{ display:flex; align-items:flex-end; gap:12px; }
   .score-box{ flex:1; }
@@ -477,6 +482,7 @@
     position:absolute; top:10px; left:10px; background: rgba(0,0,0,0.35); color:#fff;
     font-family: var(--font-display); font-size:11px; font-weight:700; padding:4px 9px; border-radius:6px; z-index:2;
   }
+  .pitch-formation-badge.over-limit{ background: var(--red); }
   .pitch-fairness{
     position:absolute; top:8px; right:8px; background: rgba(0,0,0,0.35); color:#fff;
     border-radius:10px; padding:6px 10px; text-align:center; z-index:2;
@@ -879,6 +885,11 @@ Collyhurst Youth JFC U15 Blue, 0, 0, 0, 0, 0"></textarea>
       <label>Match length (mins, optional)</label>
       <input id="fxMatchLength" type="number" min="0" placeholder="e.g. 70">
       <div class="hint">Used by the Timer to show time remaining. Leave blank to just count up with no target.</div>
+    </div>
+    <div class="field">
+      <label>Players per side (optional)</label>
+      <input id="fxPlayersPerSide" type="number" min="0" placeholder="e.g. 9">
+      <div class="hint">Used by the Timer to flag if you've got too many players on at once. Leave blank to skip the check.</div>
     </div>
     <div class="used-toggle" style="margin-bottom:6px;">
       <input type="checkbox" id="fxFriendly">
@@ -2626,6 +2637,7 @@ function openFixtureSetup(id){
   document.getElementById('fxVenue').value = f ? (f.venue || '') : '';
   document.getElementById('fxCompetition').value = f ? (f.competition || '') : defaultCompetition(activeFixtureTeam);
   document.getElementById('fxMatchLength').value = f && f.matchLengthMins ? f.matchLengthMins : '';
+  document.getElementById('fxPlayersPerSide').value = f && f.playersPerSide ? f.playersPerSide : '';
   document.getElementById('fxFriendly').checked = f ? !!f.friendly : false;
   fxHomeAwayValue = f ? (f.homeAway || 'home') : 'home';
   document.querySelectorAll('#fxHomeAwaySeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===fxHomeAwayValue));
@@ -2641,6 +2653,7 @@ document.getElementById('fxSave').onclick = () => {
   const venue = document.getElementById('fxVenue').value.trim();
   const competition = document.getElementById('fxCompetition').value.trim();
   const matchLengthMins = parseInt(document.getElementById('fxMatchLength').value, 10) || 0;
+  const playersPerSide = parseInt(document.getElementById('fxPlayersPerSide').value, 10) || 0;
   const friendly = document.getElementById('fxFriendly').checked;
   const id = document.getElementById('fxId').value;
   if(!opponent){ showToast('Add an opponent'); return; }
@@ -2648,11 +2661,11 @@ document.getElementById('fxSave').onclick = () => {
   const list = fixtures[activeFixtureTeam];
   if(id){
     const f = list.find(x=>x.id===id);
-    if(f) Object.assign(f, { opponent, date, time, venue, competition, matchLengthMins, friendly, homeAway: fxHomeAwayValue });
+    if(f) Object.assign(f, { opponent, date, time, venue, competition, matchLengthMins, playersPerSide, friendly, homeAway: fxHomeAwayValue });
   } else {
     list.push({
       id: 'fx-'+Date.now()+'-'+Math.floor(Math.random()*1000),
-      opponent, date, time, venue, competition, matchLengthMins, friendly, homeAway: fxHomeAwayValue,
+      opponent, date, time, venue, competition, matchLengthMins, playersPerSide, friendly, homeAway: fxHomeAwayValue,
       squad: [], played: false, scoreUs: 0, scoreThem: 0, scorers: {}, potm: '', notes: '', leagueApplied: false
     });
   }
@@ -2912,6 +2925,10 @@ function togglePlayerOnOff(name){
   } else {
     const pos = t.lastPosition[name] || TIMER_POSITIONS[0];
     t.stints.push({ id:'st-'+Date.now()+'-'+Math.floor(Math.random()*1000), player:name, position:pos, onSeconds:nowSec, offSeconds:null });
+    const onNow = (f.squad||[]).filter(p=>isPlayerOn(f,p)).length;
+    if(f.playersPerSide && onNow > f.playersPerSide){
+      showToast(`That's ${onNow} on the pitch — you set ${f.playersPerSide} a side. Check no one's still marked on who's actually off.`, 5000);
+    }
   }
   persistFixtures();
   renderTimerSheet();
@@ -2978,7 +2995,9 @@ function renderPitchView(f, t){
   });
   const bench = squad.filter(name => !isPlayerOn(f, name));
   const onCount = rows.GK.length + rows.DEF.length + rows.MID.length + rows.FWD.length;
-  const formationLabel = onCount > 0 ? `${rows.GK.length}-${rows.DEF.length}-${rows.MID.length}-${rows.FWD.length}` : '—';
+  const formationShape = onCount > 0 ? `${rows.GK.length}-${rows.DEF.length}-${rows.MID.length}-${rows.FWD.length}` : '—';
+  const overLimit = f.playersPerSide && onCount > f.playersPerSide;
+  const formationLabel = f.playersPerSide ? `${onCount}/${f.playersPerSide} · ${formationShape}` : formationShape;
 
   const blob = (name, cls) => `<div class="pitch-blob ${cls||''}">${escapeHtml(firstName(name))}</div>`;
   const rowHtml = (names) => names.length ? `<div class="pitch-row">${names.map(n=>blob(n)).join('')}</div>` : '';
@@ -2995,7 +3014,7 @@ function renderPitchView(f, t){
 
   return `
     <div class="pitch-view">
-      <div class="pitch-formation-badge">${formationLabel}</div>
+      <div class="pitch-formation-badge${overLimit ? ' over-limit' : ''}">${formationLabel}</div>
       ${fairnessHtml}
       ${onCount === 0
         ? '<div class="pitch-empty">No one on the pitch yet — tap PITCH below to bring players on.</div>'
@@ -3195,10 +3214,10 @@ function persistSummaryCollapsed(){
   catch(e){ /* non-critical */ }
 }
 function summarySection(key, title, rowsHtml){
-  const collapsed = !!summaryCollapsed[key];
+  const collapsed = summaryCollapsed[key] === undefined ? true : !!summaryCollapsed[key];
   return `
     <div class="summary-section">
-      <button class="summary-toggle" data-key="${key}">
+      <button class="summary-toggle${collapsed?' is-collapsed':''}" data-key="${key}">
         <span>${title}</span>
         <svg class="chev${collapsed?' collapsed':''}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
@@ -3229,7 +3248,12 @@ function renderSummary(){
     wrap.innerHTML = `<div class="empty"><h3>No sessions or games yet</h3><p>Stats will show up here once you've saved a session or a game.</p></div>`;
     return;
   }
-  let html = '';
+  let html = `
+    <div class="summary-quick-actions">
+      <button class="btn-mini" id="summaryExpandAllBtn">Expand All</button>
+      <button class="btn-mini" id="summaryCollapseAllBtn">Collapse All</button>
+    </div>
+  `;
 
   if(teamSessions.length > 0){
     const totalSessions = teamSessions.length;
@@ -3272,14 +3296,25 @@ function renderSummary(){
   }
 
   wrap.innerHTML = html;
+  const renderedKeys = [...wrap.querySelectorAll('.summary-toggle')].map(b=>b.dataset.key);
   wrap.querySelectorAll('.summary-toggle').forEach(btn=>{
     btn.onclick = () => {
       const key = btn.dataset.key;
-      summaryCollapsed[key] = !summaryCollapsed[key];
+      summaryCollapsed[key] = !(summaryCollapsed[key] === undefined ? true : summaryCollapsed[key]);
       persistSummaryCollapsed();
       renderSummary();
     };
   });
+  document.getElementById('summaryExpandAllBtn').onclick = () => {
+    renderedKeys.forEach(k => { summaryCollapsed[k] = false; });
+    persistSummaryCollapsed();
+    renderSummary();
+  };
+  document.getElementById('summaryCollapseAllBtn').onclick = () => {
+    renderedKeys.forEach(k => { summaryCollapsed[k] = true; });
+    persistSummaryCollapsed();
+    renderSummary();
+  };
 }
 
 // ---- Init ----
