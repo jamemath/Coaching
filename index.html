@@ -1014,6 +1014,17 @@ function sheetsConfigured(){ return !!(GOOGLE_CLIENT_ID && SPREADSHEET_ID); }
 let accessToken = null;
 let rowMap = {}; // data key -> sheet row number
 
+function recordSyncedNow(){
+  try{ localStorage.setItem('coachlog_last_synced', String(Date.now())); }catch(e){}
+}
+function lastSyncedLabel(){
+  try{
+    const t = parseInt(localStorage.getItem('coachlog_last_synced') || '0', 10);
+    if(!t) return null;
+    return 'last synced ' + new Date(t).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  }catch(e){ return null; }
+}
+
 function loadCachedToken(){
   try{
     const raw = localStorage.getItem('coachlog_google_token');
@@ -1046,7 +1057,13 @@ function setSyncStatus(state){
   };
   const [color, title] = map[state] || map.off;
   dot.style.background = color;
-  dot.title = title;
+  if(state === 'ok'){
+    recordSyncedNow();
+    const label = lastSyncedLabel();
+    dot.title = label ? `${title} — ${label}` : title;
+  } else {
+    dot.title = title;
+  }
 }
 
 function initGoogleAuth(){
@@ -1139,6 +1156,11 @@ async function pushKey(key, value){
   if(!sheetsConfigured() || !accessToken){ return; }
   setSyncStatus('pending');
   try{
+    if(!rowMap[key]){
+      // Row location unknown this session — refresh from the sheet first so a
+      // key that already exists remotely gets updated in place, not duplicated.
+      await sheetsPullAll();
+    }
     let res;
     if(rowMap[key]){
       const row = rowMap[key];
@@ -2685,8 +2707,24 @@ document.getElementById('syncDot').onclick = async () => {
   SYNC_KEYS.forEach(k => { if(localStorage.getItem(k) !== null) markPending(k); });
   showToast('Resyncing…');
   await flushPending();
-  if(pendingSync.size === 0) showToast('Resync complete');
+  if(pendingSync.size === 0){
+    const label = lastSyncedLabel();
+    showToast(label ? `Resync complete — ${label}` : 'Resync complete');
+  }
 };
+
+// Retry writes that didn't make it to the Sheet first time — e.g. a drill
+// marked used pitch-side with no signal. Nothing to type, nothing to remember:
+// as soon as there's a connection again, pending changes flush on their own.
+async function retryPendingIfNeeded(){
+  if(!accessToken || pendingSync.size === 0) return;
+  await flushPending();
+}
+setInterval(retryPendingIfNeeded, 20000);
+window.addEventListener('online', retryPendingIfNeeded);
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible') retryPendingIfNeeded();
+});
 
 init();
 </script>
