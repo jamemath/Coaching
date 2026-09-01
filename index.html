@@ -1095,6 +1095,35 @@ const LEAGUE_SEED_PREDS = [
 
 const LEAGUE_SEED_MEERKATS = [];
 
+// Full 2026-27 EMJFL Division 1 season, from the FA Full-Time fixture list.
+const PREDS_FIXTURES_SEED = [
+  ['Roach Dynamos U15 Sunday','2026-09-06','09:30','ROACH DYNAMOS JFC','away'],
+  ['Collyhurst Youth JFC U15 Blue','2026-09-20','12:30','MANCHESTER COMMUNICATION ACADEMY #1','away'],
+  ['Dukinfield Youth JFC U15 Whites','2026-10-04','10:30','Astley Sports College, Pitch 4','away'],
+  ['Waterloo AFC U15','2026-10-11','11:00','WATERLOO FOOTBALL GROUND','away'],
+  ['Roach Dynamos U15 Sunday','2026-10-25','10:00','FLIXTON GIRLS SCHOOL','home'],
+  ['Collyhurst Youth JFC U15 Blue','2026-11-08','10:00','FLIXTON GIRLS SCHOOL','home'],
+  ['Northside U15 Reds','2026-11-22','10:00','FLIXTON GIRLS SCHOOL','home'],
+  ['Hazel Grove United FC U15 Jets','2026-12-06','10:00','Hazel Grove High School (3G pitch)','away'],
+  ['Manchester Dragons Community Junior Foot','2027-01-10','11:15','MANCHESTER ACADEMY','away'],
+  ['Waterloo AFC U15','2027-01-17','10:00','FLIXTON GIRLS SCHOOL','home'],
+  ['R-Kix U15 Rochdale','2027-01-31','10:00','FLIXTON GIRLS SCHOOL','home'],
+  ['Wythenshawe Celtic U15 Select','2027-02-07','09:00','Newall Green HS','away'],
+  ['Northside U15 Reds','2027-02-28','11:00','Hewlett Johnson PF M11 4PR','away'],
+  ['Tintwistle Athletic U15','2027-03-14','10:00','FLIXTON GIRLS SCHOOL','home'],
+  ['Manchester Dragons Community Junior Foot','2027-04-11','10:00','FLIXTON GIRLS SCHOOL','home'],
+  ['Dukinfield Youth JFC U15 Whites','2027-04-25','10:00','FLIXTON GIRLS SCHOOL','home'],
+  ['Wythenshawe Celtic U15 Select','2027-05-09','10:00','FLIXTON GIRLS SCHOOL','home'],
+  ['Tintwistle Athletic U15','2027-05-30','11:00','West Drive PF','away'],
+  ['R-Kix U15 Rochdale','2027-06-06','09:30','Hopwood Hall Grass Pitch','away'],
+  ['Hazel Grove United FC U15 Jets','2027-06-20','10:00','FLIXTON GIRLS SCHOOL','home'],
+].map((row,i) => ({
+  id: 'fx-preds-seed-'+i,
+  opponent: row[0], date: row[1], time: row[2], venue: row[3], homeAway: row[4],
+  competition: 'EMJFL Division 1', friendly: false,
+  squad: [], played: false, scoreUs: 0, scoreThem: 0, scorers: {}, potm: '', notes: '', leagueApplied: false
+}));
+
 let drills = [];
 let players = [];
 let coaches = [];
@@ -1267,6 +1296,7 @@ async function afterSignIn(){
   }
   loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs(); loadLeague(); loadFixtures(); loadPredsPlayers(); loadPredsCoaches();
   migrateLegacyGames();
+  seedPredsFixturesIfEmpty();
   render();
 }
 
@@ -2154,6 +2184,21 @@ function migrateLegacyGames(){
     }
     localStorage.setItem('coachlog_games_migrated', '1');
   }catch(e){ console.error('Legacy games migration failed', e); }
+}
+
+// One-time seed of the full EMJFL Division 1 season into Preds fixtures.
+// Only fires if Preds fixtures are currently empty, so it never overwrites
+// anything already entered (Setup/Squad/Timer/Result all still work as normal
+// once these are in).
+function seedPredsFixturesIfEmpty(){
+  try{
+    if(localStorage.getItem('coachlog_preds_fixtures_seeded')) return;
+    if(fixtures.preds && fixtures.preds.length === 0){
+      fixtures.preds = PREDS_FIXTURES_SEED.map(f => ({...f}));
+      persistFixtures();
+    }
+    localStorage.setItem('coachlog_preds_fixtures_seeded', '1');
+  }catch(e){ console.error('Preds fixtures seed failed', e); }
 }
 
 document.querySelectorAll('#gamesSeg button').forEach(b=>{
@@ -3332,6 +3377,7 @@ function init(){
   loadPredsCoaches();
   loadSummaryCollapsed();
   migrateLegacyGames();
+  seedPredsFixturesIfEmpty();
   document.getElementById('sessionDate').value = todayISO();
   document.getElementById('gameDate').value = todayISO();
   render();
@@ -3354,6 +3400,7 @@ document.getElementById('syncDot').onclick = async () => {
     loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs();
     loadLeague(); loadFixtures(); loadPredsPlayers(); loadPredsCoaches();
     migrateLegacyGames();
+    seedPredsFixturesIfEmpty();
     render();
     setSyncStatus(pendingSync.size ? 'pending' : 'ok');
     if(pendingSync.size === 0){
