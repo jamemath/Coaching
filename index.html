@@ -493,10 +493,16 @@
   .pitch-row{ display:flex; justify-content:space-evenly; align-items:center; flex-wrap:wrap; gap:6px; margin-top:22px; }
   .pitch-row:first-of-type{ margin-top:30px; }
   .pitch-blob{
+    position:relative;
     width:54px; height:54px; border-radius:50%; background: linear-gradient(160deg, #3B6FD1, #2952A3);
     display:flex; align-items:center; justify-content:center; text-align:center;
     color:#fff; font-family: var(--font-display); font-weight:700; font-size:11px; line-height:1.1;
     border:2px solid rgba(255,255,255,0.55); box-shadow:0 2px 6px rgba(0,0,0,0.25); padding:2px; word-break:break-word;
+  }
+  .pitch-blob-pos{
+    position:absolute; bottom:-8px; left:50%; transform:translateX(-50%);
+    background: rgba(0,0,0,0.6); color:#fff; font-size:8px; font-weight:700;
+    padding:1px 5px; border-radius:6px; letter-spacing:0.3px; white-space:nowrap; z-index:1;
   }
   .pitch-empty{ text-align:center; color: rgba(255,255,255,0.6); font-size:12.5px; padding:30px 0; }
   .pitch-bench{
@@ -2897,7 +2903,16 @@ function applyResultToLeague(team, f){
 // Tracks live on/off stints per player (with position) against wall-clock
 // time, so backgrounding the app doesn't lose accuracy. Feeds a "time on
 // pitch" fairness view in Summary.
-const TIMER_POSITIONS = ['GK','DEF','MID','FWD'];
+const POSITION_GROUPS = [
+  { label:'GK',  options:['GK'] },
+  { label:'DEF', options:['LB','CB','RB'] },
+  { label:'MID', options:['LM','CDM','CM','CAM','RM'] },
+  { label:'FWD', options:['LW','ST','RW'] }
+];
+const TIMER_POSITIONS = POSITION_GROUPS.flatMap(g => g.options);
+const POSITION_CATEGORY = {}; // e.g. 'CB' -> 'DEF', used to bucket the pitch view rows
+const POSITION_ORDER = {};    // left-to-right order within a row
+POSITION_GROUPS.forEach(g => g.options.forEach((p, i) => { POSITION_CATEGORY[p] = g.label; POSITION_ORDER[p] = i; }));
 let timerFixtureId = null;
 let timerTickHandle = null;
 
@@ -3035,17 +3050,19 @@ function renderPitchView(f, t){
   const rows = { FWD:[], MID:[], DEF:[], GK:[] };
   squad.forEach(name=>{
     if(!isPlayerOn(f, name)) return;
-    const pos = t.lastPosition[name] || 'MID';
-    (rows[pos] || rows.MID).push(name);
+    const pos = t.lastPosition[name] || 'CM';
+    const cat = POSITION_CATEGORY[pos] || 'MID';
+    rows[cat].push({ name, pos });
   });
+  Object.values(rows).forEach(r => r.sort((a,b) => (POSITION_ORDER[a.pos] ?? 0) - (POSITION_ORDER[b.pos] ?? 0)));
   const bench = squad.filter(name => !isPlayerOn(f, name));
   const onCount = rows.GK.length + rows.DEF.length + rows.MID.length + rows.FWD.length;
   const formationShape = onCount > 0 ? `${rows.GK.length}-${rows.DEF.length}-${rows.MID.length}-${rows.FWD.length}` : '—';
   const overLimit = f.playersPerSide && onCount > f.playersPerSide;
   const formationLabel = f.playersPerSide ? `${onCount}/${f.playersPerSide} · ${formationShape}` : formationShape;
 
-  const blob = (name, cls) => `<div class="pitch-blob ${cls||''}">${escapeHtml(firstName(name))}</div>`;
-  const rowHtml = (names) => names.length ? `<div class="pitch-row">${names.map(n=>blob(n)).join('')}</div>` : '';
+  const blob = (name, pos, cls) => `<div class="pitch-blob ${cls||''}">${escapeHtml(firstName(name))}${pos ? `<span class="pitch-blob-pos">${pos}</span>` : ''}</div>`;
+  const rowHtml = (entries) => entries.length ? `<div class="pitch-row">${entries.map(e=>blob(e.name, e.pos)).join('')}</div>` : '';
 
   const secs = squad.map(p => playerMatchSeconds(f, p));
   let fairnessHtml = '';
@@ -3068,18 +3085,41 @@ function renderPitchView(f, t){
     <div class="pitch-bench">
       <div class="pitch-bench-label">Bench (${bench.length})</div>
       <div class="pitch-bench-blobs">
-        ${bench.length ? bench.map(n=>blob(n,'bench')).join('') : '<span class="hint" style="color:rgba(255,255,255,0.6);">Everyone\'s on</span>'}
+        ${bench.length ? bench.map(n=>blob(n,null,'bench')).join('') : '<span class="hint" style="color:rgba(255,255,255,0.6);">Everyone\'s on</span>'}
       </div>
     </div>
   `;
+}
+
+// Auto-stops the clock the instant it hits half-time (half 1) or full-time
+// (half 2), clamping to the exact whistle second rather than overshooting by
+// up to a second. Assumes matchLengthMins splits evenly into two halves.
+// Switching to half 2 (and resuming) is still a manual tap, same as today.
+function checkHalfAutoStop(t, elapsed, targetSec){
+  if(!t.running || targetSec <= 0) return false;
+  const halfSec = targetSec / 2;
+  const whistleAt = t.half === 1 ? halfSec : (t.half === 2 ? targetSec : null);
+  if(whistleAt != null && elapsed >= whistleAt){
+    t.accumulatedSeconds = whistleAt;
+    t.running = false;
+    t.lastStartedAt = null;
+    stopTimerTick();
+    persistFixtures();
+    showToast(t.half === 1
+      ? `Half time — clock stopped at ${formatClock(whistleAt)}`
+      : `Full time — clock stopped at ${formatClock(whistleAt)}`, 5000);
+    return true;
+  }
+  return false;
 }
 
 function renderTimerSheet(){
   const f = currentTimerFixture();
   if(!f) return;
   const t = ensureTimer(f);
-  const elapsed = getElapsedSeconds(f);
+  let elapsed = getElapsedSeconds(f);
   const targetSec = (f.matchLengthMins || 0) * 60;
+  if(checkHalfAutoStop(t, elapsed, targetSec)) elapsed = getElapsedSeconds(f);
   const clockEl = document.getElementById('timerClock');
   clockEl.textContent = formatClock(elapsed);
   document.getElementById('timerHalf').textContent = t.half === 1 ? '1st Half' : (t.half === 2 ? '2nd Half' : `Period ${t.half}`);
@@ -3117,7 +3157,7 @@ function renderTimerSheet(){
         <button class="timer-onoff ${on?'is-on':'is-off'}" data-name="${escapeAttr(name)}">${on?'PITCH':'SUB'}</button>
         <span class="timer-name">${escapeHtml(name)}</span>
         <select class="timer-pos" data-name="${escapeAttr(name)}">
-          ${TIMER_POSITIONS.map(p=>`<option value="${p}" ${p===pos?'selected':''}>${p}</option>`).join('')}
+          ${POSITION_GROUPS.map(g=>`<optgroup label="${g.label}">${g.options.map(p=>`<option value="${p}" ${p===pos?'selected':''}>${p}</option>`).join('')}</optgroup>`).join('')}
         </select>
         <span class="timer-time">${formatClock(sec)}</span>
       </div>
