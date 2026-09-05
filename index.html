@@ -470,6 +470,32 @@
     font-family: var(--font-display); font-size:11px; font-weight:700; letter-spacing:0.3px;
     padding:4px 12px; border-radius:20px; cursor:pointer; margin-bottom:8px;
   }
+  .timer-score{
+    font-family: var(--font-display); font-weight:700; font-size:20px; color:#fff; margin-bottom:2px; letter-spacing:0.5px;
+  }
+  .timer-goal-actions{ display:flex; gap:10px; margin-top:10px; }
+  .btn-goal{
+    flex:1; padding:11px; border-radius:11px; border:none; cursor:pointer; font-weight:700; font-size:13.5px;
+    font-family: var(--font-body);
+  }
+  .btn-goal.us{ background: var(--gold); color: var(--pitch-dark); }
+  .btn-goal.them{ background: rgba(255,255,255,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3); }
+  .scorer-picker{
+    display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; padding-top:10px; border-top:1px dashed rgba(255,255,255,0.2);
+  }
+  .scorer-picker button{
+    background: rgba(255,255,255,0.12); border:1px solid rgba(255,255,255,0.25); color:#fff;
+    padding:7px 12px; border-radius:20px; font-size:13px; font-weight:500; cursor:pointer;
+  }
+  .scorer-picker button.cancel{ background:none; color: rgba(255,255,255,0.6); border-color:transparent; }
+  .goal-log{ margin:8px 0 0; text-align:left; }
+  .goal-log-row{
+    display:flex; align-items:center; gap:8px; padding:5px 2px; font-size:12.5px; color: rgba(255,255,255,0.75);
+  }
+  .goal-log-row b{ color:#fff; }
+  .goal-log-row button{
+    margin-left:auto; border:none; background:none; color: rgba(255,255,255,0.5); cursor:pointer; font-size:13px; padding:2px 6px;
+  }
 
   .pitch-view{
     position:relative; border-radius:14px; padding:14px 8px; margin:12px 0 10px;
@@ -968,6 +994,7 @@ Collyhurst Youth JFC U15 Blue, 0, 0, 0, 0, 0"></textarea>
     <h2 id="timerSheetTitle">Match Timer</h2>
     <div class="timer-clock-wrap">
       <button class="timer-half" id="timerHalf">1st Half</button>
+      <div class="timer-score" id="timerScoreLine">0 – 0</div>
       <div class="timer-clock" id="timerClock">00:00</div>
       <div class="timer-clock-sub" id="timerClockSub"></div>
       <div class="timer-progress-track" id="timerProgressTrack" style="display:none;">
@@ -977,6 +1004,12 @@ Collyhurst Youth JFC U15 Blue, 0, 0, 0, 0, 0"></textarea>
         <button class="btn btn-primary" id="timerStartPauseBtn" style="flex:1;">Start</button>
         <button class="btn btn-ghost" id="timerResetBtn" title="Reset clock to zero">Reset</button>
       </div>
+      <div class="timer-goal-actions">
+        <button class="btn-goal us" id="timerGoalUsBtn">⚽ Goal — Us</button>
+        <button class="btn-goal them" id="timerGoalThemBtn">⚽ Goal — Them</button>
+      </div>
+      <div id="timerScorerPicker" style="display:none;"></div>
+      <div id="timerGoalLog"></div>
     </div>
     <div id="pitchViewWrap"></div>
     <div class="hint" style="margin:10px 0 4px;">Tap Pitch/Sub to swap a player on or off, tap again to reverse it. Change their position any time — it splits into a new stint with no time lost.</div>
@@ -2924,8 +2957,9 @@ function formatClock(totalSeconds){
 }
 
 function ensureTimer(f){
-  if(!f.timer) f.timer = { running:false, accumulatedSeconds:0, lastStartedAt:null, stints:[], lastPosition:{}, finalized:false, half:1 };
+  if(!f.timer) f.timer = { running:false, accumulatedSeconds:0, lastStartedAt:null, stints:[], lastPosition:{}, finalized:false, half:1, goals:[] };
   if(f.timer.half === undefined) f.timer.half = 1;
+  if(!f.timer.goals) f.timer.goals = [];
   return f.timer;
 }
 
@@ -2966,12 +3000,61 @@ function toggleTimerRunning(){
     t.lastStartedAt = null;
     stopTimerTick();
   } else {
+    const targetSec = (f.matchLengthMins || 0) * 60;
+    const halfSec = targetSec / 2;
+    if(targetSec > 0 && t.half === 1 && t.accumulatedSeconds >= halfSec - 0.5){
+      t.half = 2;
+      showToast('Second half — clock resuming', 3000);
+    }
     t.running = true;
     t.lastStartedAt = Date.now();
     startTimerTick();
   }
   persistFixtures();
   renderTimerSheet();
+}
+
+function logGoal(team, player){
+  const f = currentTimerFixture();
+  if(!f) return;
+  const t = ensureTimer(f);
+  const sec = getElapsedSeconds(f);
+  const goal = { id:'gl-'+Date.now()+'-'+Math.floor(Math.random()*1000), team, player: player||null, sec };
+  t.goals.push(goal);
+  if(team === 'us'){
+    f.scoreUs = (f.scoreUs||0) + 1;
+    if(player){
+      f.scorers = f.scorers || {};
+      f.scorers[player] = (f.scorers[player]||0) + 1;
+    }
+  } else {
+    f.scoreThem = (f.scoreThem||0) + 1;
+  }
+  persistFixtures();
+  renderTimerSheet();
+  showToast(team==='us' ? `Goal! ${player ? player+' — ' : ''}${f.scoreUs}-${f.scoreThem}` : `Goal against — ${f.scoreUs}-${f.scoreThem}`, 3000);
+}
+
+function undoGoal(goalId){
+  const f = currentTimerFixture();
+  if(!f) return;
+  const t = ensureTimer(f);
+  const idx = t.goals.findIndex(g=>g.id===goalId);
+  if(idx===-1) return;
+  const g = t.goals[idx];
+  t.goals.splice(idx,1);
+  if(g.team==='us'){
+    f.scoreUs = Math.max(0, (f.scoreUs||0) - 1);
+    if(g.player && f.scorers && f.scorers[g.player]){
+      f.scorers[g.player] = Math.max(0, f.scorers[g.player]-1);
+      if(f.scorers[g.player]===0) delete f.scorers[g.player];
+    }
+  } else {
+    f.scoreThem = Math.max(0, (f.scoreThem||0) - 1);
+  }
+  persistFixtures();
+  renderTimerSheet();
+  showToast('Goal removed');
 }
 
 function togglePlayerOnOff(name){
@@ -3144,6 +3227,22 @@ function renderTimerSheet(){
   const startBtn = document.getElementById('timerStartPauseBtn');
   startBtn.textContent = t.running ? 'Pause' : (t.accumulatedSeconds > 0 ? 'Resume' : 'Start');
 
+  document.getElementById('timerScoreLine').textContent = `${f.scoreUs||0} – ${f.scoreThem||0}`;
+  const goalLogEl = document.getElementById('timerGoalLog');
+  if(t.goals.length === 0){
+    goalLogEl.innerHTML = '';
+  } else {
+    goalLogEl.innerHTML = '<div class="goal-log">' + t.goals.slice().sort((a,b)=>a.sec-b.sec).map(g => `
+      <div class="goal-log-row">
+        ⚽ ${formatClock(g.sec)} — ${g.team==='us' ? `<b>${g.player ? escapeHtml(g.player) : 'Us'}</b>` : 'Them'}
+        <button class="goal-undo" data-id="${g.id}">✕</button>
+      </div>
+    `).join('') + '</div>';
+    goalLogEl.querySelectorAll('.goal-undo').forEach(btn=>{
+      btn.onclick = () => undoGoal(btn.dataset.id);
+    });
+  }
+
   document.getElementById('pitchViewWrap').innerHTML = renderPitchView(f, t);
 
   const wrap = document.getElementById('timerPlayersList');
@@ -3172,11 +3271,31 @@ function renderTimerSheet(){
   });
 }
 
+document.getElementById('timerGoalThemBtn').onclick = () => logGoal('them', null);
+document.getElementById('timerGoalUsBtn').onclick = () => {
+  const f = currentTimerFixture();
+  if(!f) return;
+  const picker = document.getElementById('timerScorerPicker');
+  const squad = f.squad || [];
+  picker.className = 'scorer-picker';
+  picker.style.display = 'flex';
+  picker.innerHTML = squad.map(name=>`<button data-name="${escapeAttr(name)}">${escapeHtml(name)}</button>`).join('')
+    + `<button data-name="">Not sure</button><button class="cancel" id="scorerCancel">Cancel</button>`;
+  picker.querySelectorAll('button[data-name]').forEach(btn=>{
+    btn.onclick = () => {
+      logGoal('us', btn.dataset.name || null);
+      picker.style.display = 'none';
+      picker.innerHTML = '';
+    };
+  });
+  picker.querySelector('#scorerCancel').onclick = () => { picker.style.display='none'; picker.innerHTML=''; };
+};
+
 document.getElementById('timerStartPauseBtn').onclick = () => toggleTimerRunning();
 document.getElementById('timerResetBtn').onclick = () => {
   const f = currentTimerFixture();
   if(!f) return;
-  f.timer = { running:false, accumulatedSeconds:0, lastStartedAt:null, stints:[], lastPosition:{}, finalized:false };
+  f.timer = { running:false, accumulatedSeconds:0, lastStartedAt:null, stints:[], lastPosition:{}, finalized:false, half:1, goals:[] };
   stopTimerTick();
   persistFixtures();
   renderTimerSheet();
