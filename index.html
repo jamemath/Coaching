@@ -1096,17 +1096,12 @@ const SEED = [
   ['Off-ball movement','movement','https://www.facebook.com/share/r/15AQAWty1E/?mibextid=wwXIfr'],
 ].map((row,i) => ({ id:'seed-'+i, name:row[0], category:row[1], url:row[2], used:false, wentWell:null, notes:'', inSession:false }));
 
-const ROSTER_SEED = [
-  'Aoife Sedgwick','Ariana Collins','Cara Adamson','Eliza Wright','Francesca Mather',
-  'Heidi Danczak','Jemima Spence','Lu-Ella Sibthorpe','Orla Parkinson','Phoebe Rowles',
-  'Poppy Mcfarlane','Poppy Jones','Rose Penza','Rosie Hogston','Tamsin Warren','Thea Hutchinson'
-];
+// Deliberately empty in the public source — this file is served with no login
+// (GitHub Pages). Real names live only in the Sheet (restricted sharing) and are
+// pulled in via sync after sign-in. Do not add real player names here.
+const ROSTER_SEED = [];
 
-const PREDS_ROSTER_SEED = [
-  'Ethan Winkley','Ethan Grogan','George Meachin','Isaac Leach','Jack Parker',
-  'James Olthof','James Cropper','James Dunn','Luca Higham','Lucan Goodyear',
-  'Max Hughes','Nate Tremeer','Oliver Byrne','Vincent Foster','Zac Cartner'
-];
+const PREDS_ROSTER_SEED = [];
 
 const COACHES_SEED = ['Jimmy', 'Scott', 'Dave', 'James'];
 
