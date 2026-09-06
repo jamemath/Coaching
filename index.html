@@ -1116,23 +1116,52 @@ const DOCS_SEED = [
   ['Team Fees (TeamFeePay)','https://app.teamfeepay.com/ca/afc-urmston-meadowside/teams/102914'],
 ].map((row,i) => ({ id:'doc-seed-'+i, name:row[0], url:row[1] }));
 
-// [name, mine] — P/W/D/L/PTS all start at 0 pre-season
+// [name, p, w, d, l, pts, mine] — as of matchday 1, 06/09/26
 const LEAGUE_SEED_PREDS = [
-  ['AFC Urmston Meadowside U15 Predators', true],
-  ['Collyhurst Youth JFC U15 Blue', false],
-  ['Dukinfield Youth JFC U15 Whites', false],
-  ['Hazel Grove United FC U15 Hazel Grove Ut', false],
-  ['Manchester Dragons Community Junior Foot', false],
-  ['Northside U15 Reds', false],
-  ['R-Kix U15 Raiders', false],
-  ['Roach Dynamos U15 Sunday', false],
-  ['Rochdale Mayfield FC U15 Rochdale Mayfie', false],
-  ['Tintwistle Athletic U15', false],
-  ['Waterloo AFC U15', false],
-  ['Wythenshawe Celtic U15 Select', false],
-].map((row,i) => ({ id:'lg-preds-seed-'+i, name:row[0], p:0, w:0, d:0, l:0, pts:0, mine:row[1] }));
+  ['AFC Urmston Meadowside U15 Predators', 1,1,0,0,3, true],
+  ['Dukinfield Youth JFC U15 Whites', 1,1,0,0,3, false],
+  ['Wythenshawe Celtic U15 Select', 1,1,0,0,3, false],
+  ['Collyhurst Youth JFC U15 Blue', 0,0,0,0,0, false],
+  ['Hazel Grove United FC U15 Jets', 0,0,0,0,0, false],
+  ['Manchester Dragons Community Junior Foot', 0,0,0,0,0, false],
+  ['Northside U15 Reds', 0,0,0,0,0, false],
+  ['R-Kix U15 Rochdale', 0,0,0,0,0, false],
+  ['Roach Dynamos U15 Sunday', 1,0,0,1,0, false],
+  ['Tintwistle Athletic U15', 1,0,0,1,0, false],
+  ['Waterloo AFC U15', 1,0,0,1,0, false],
+].map((row,i) => ({ id:'lg-preds-seed-'+i, name:row[0], p:row[1], w:row[2], d:row[3], l:row[4], pts:row[5], mine:row[6] }));
 
-const LEAGUE_SEED_MEERKATS = [];
+// [name, p, w, d, l, pts, mine] — as of matchday 1, 05/09/26
+const LEAGUE_SEED_MEERKATS = [
+  ['Lymm Rovers Junior U12 Jaguars', 1,1,0,0,3, false],
+  ['Spurley Hey U12 Girls Blues', 1,1,0,0,3, false],
+  ['Wythenshawe FC U12 Lynxes', 1,1,0,0,3, false],
+  ['Daisy Hill Junior U12 Daisy Hill Diamond', 1,1,0,0,3, false],
+  ['Winton Wanderers U12 Pandas', 1,1,0,0,3, false],
+  ['Cheadle Town Stingers WFC U12 Stingers', 1,1,0,0,3, false],
+  ['Altrincham FC Juniors U12 Girls Griffins', 1,1,0,0,3, false],
+  ['Atherton Laburnum Rovers U12', 1,1,0,0,3, false],
+  ['Kingsway Athletic U12 Girls', 1,1,0,0,3, false],
+  ['Altrincham FC Juniors U12 Girls Starling', 1,1,0,0,3, false],
+  ['Reddish North End U12 Girls Maroon', 1,1,0,0,3, false],
+  ['Diggle U12 Butterflies', 1,1,0,0,3, false],
+  ['Astley & Tyldesley J.F.C. U12 Lionesses', 1,1,0,0,3, false],
+  ['Moss Lane Rovers FC U12', 0,0,0,0,0, false],
+  ['Wythenshawe FC U12 Pumas', 0,0,0,0,0, false],
+  ['Flixton Juniors U12 Starlings Girls', 1,0,0,1,0, false],
+  ['Altrincham FC Juniors U12 Girls Redwings', 1,0,0,1,0, false],
+  ['Brooklands Dragons JFC U12 Eagles', 1,0,0,1,0, false],
+  ['Broadheath Central FC U12 Jaguars', 1,0,0,1,0, false],
+  ['Unicorn Athletic JFC U12 Phantoms', 1,0,0,1,0, false],
+  ['West Didsbury & Chorlton AFC U12 Pumas', 1,0,0,1,0, false],
+  ['Spurley Hey U12 Girls Clarets', 1,0,0,1,0, false],
+  ['Timperley FC U12 Jaguars', 1,0,0,1,0, false],
+  ['Brooklands Dragons JFC U12 Falcons', 1,0,0,1,0, false],
+  ['Sale United U12 Lionesses', 1,0,0,1,0, false],
+  ['Lymm Rovers Junior U12 Cheetahs', 1,0,0,1,0, false],
+  ['AFC Urmston Meadowside U12 Girls Meerkat', 1,0,0,1,0, true],
+  ['Stockport Dynamoes Juniors U12 Lightning', 1,0,0,1,0, false],
+].map((row,i) => ({ id:'lg-meerkats-seed-'+i, name:row[0], p:row[1], w:row[2], d:row[3], l:row[4], pts:row[5], mine:row[6] }));
 
 // Full 2026-27 EMJFL Division 1 season, from the FA Full-Time fixture list.
 const PREDS_FIXTURES_SEED = [
