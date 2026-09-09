@@ -274,6 +274,19 @@
   .attend-row input[type=checkbox]{ width:18px; height:18px; accent-color: var(--pitch-mid); flex-shrink:0; }
   .attend-row .att-name{ flex:1; font-size:14.5px; }
   .attend-row .att-count{ font-size:11px; color: var(--ink-soft); flex-shrink:0; }
+  .avail-row{ display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--chalk-line); }
+  .avail-row:last-child{ border-bottom:none; }
+  .avail-row .att-name{ flex:1; font-size:14.5px; }
+  .avail-toggle{ display:flex; gap:4px; flex-shrink:0; }
+  .avail-btn{
+    border:1px solid var(--chalk-line); background:#fff; color: var(--ink-soft);
+    font-size:11px; font-weight:600; padding:5px 9px; border-radius:8px; cursor:pointer;
+  }
+  .avail-btn.active-yes{ background: var(--pitch-mid); border-color: var(--pitch-mid); color:#fff; }
+  .avail-btn.active-no{ background: var(--red); border-color: var(--red); color:#fff; }
+  .avail-btn.active-tbc{ background: var(--gold); border-color: var(--gold-dark); color: var(--pitch-dark); }
+  .avail-tally{ display:flex; gap:10px; font-size:12px; color: var(--ink-soft); margin-bottom:10px; }
+  .avail-tally b{ color: var(--ink); }
   .add-player-row{ display:flex; gap:8px; margin-top:8px; }
   .add-player-row input{
     flex:1; padding:9px 10px; border-radius:8px; border:1.5px solid var(--chalk-line); font-family: var(--font-body); font-size:14px; background:#fff;
@@ -956,6 +969,39 @@ Collyhurst Youth JFC U15 Blue, 0, 0, 0, 0, 0"></textarea>
   </div>
 </div>
 
+<!-- Coach Duty sheet -->
+<div class="sheet-backdrop" id="dutyBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="dutySheetTitle">Coaches on Duty</h2>
+    <div class="hint" style="margin-top:-6px; margin-bottom:10px;">Who's covering this one. Change it any time — if plans fall through, just come back and swap it.</div>
+    <div id="dutyCoachesList"></div>
+    <div class="sheet-actions" style="margin-top:16px;">
+      <button class="btn btn-ghost" id="dutyCancel">Close</button>
+      <button class="btn btn-primary" id="dutySave">Save Duty</button>
+    </div>
+  </div>
+</div>
+
+<!-- Player Availability sheet -->
+<div class="sheet-backdrop" id="availBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="availSheetTitle">Player Availability</h2>
+    <div class="hint" style="margin-top:-6px; margin-bottom:8px;">Who's said they can make this one — separate from the final Squad. Statuses can be changed any time right up to matchday.</div>
+    <div class="avail-tally" id="availTally"></div>
+    <div class="attend-actions">
+      <button class="btn-mini" id="availAllYesBtn">All Yes</button>
+      <button class="btn-mini" id="availResetBtn">Reset to TBC</button>
+    </div>
+    <div id="availPlayersList"></div>
+    <div class="sheet-actions" style="margin-top:16px;">
+      <button class="btn btn-ghost" id="availCancel">Close</button>
+      <button class="btn btn-primary" id="availSave">Save Availability</button>
+    </div>
+  </div>
+</div>
+
 <!-- Record Result sheet -->
 <div class="sheet-backdrop" id="resultBackdrop">
   <div class="sheet">
@@ -1184,7 +1230,8 @@ const PREDS_FIXTURES_SEED = [
   id: 'fx-preds-seed-'+i,
   opponent: row[0], date: row[1], time: row[2], venue: row[3], homeAway: row[4],
   competition: 'EMJFL Division 1', friendly: false,
-  squad: [], played: false, scoreUs: 0, scoreThem: 0, scorers: {}, potm: '', notes: '', leagueApplied: false
+  squad: [], played: false, scoreUs: 0, scoreThem: 0, scorers: {}, potm: '', notes: '', leagueApplied: false,
+  coachDuty: [], availability: {}
 }));
 
 let drills = [];
@@ -1637,6 +1684,12 @@ function loadFixtures(){
   }catch(e){ fixtures = { preds: [], meerkats: [] }; }
   if(!fixtures.preds) fixtures.preds = [];
   if(!fixtures.meerkats) fixtures.meerkats = [];
+  [fixtures.preds, fixtures.meerkats].forEach(list=>{
+    list.forEach(f=>{
+      if(!f.coachDuty) f.coachDuty = [];
+      if(!f.availability) f.availability = {};
+    });
+  });
   try{
     const savedTeam = localStorage.getItem('coachlog_fixture_active');
     if(savedTeam === 'preds' || savedTeam === 'meerkats') activeFixtureTeam = savedTeam;
@@ -2687,10 +2740,15 @@ function renderFixtures(){
     wrap.innerHTML = `<div class="empty"><h3>No fixtures yet</h3><p>Tap + to add your next match.</p></div>`;
     return;
   }
+  const roster = fixtureRoster(activeFixtureTeam);
   wrap.innerHTML = list.map(f=>{
     const scorersList = Object.entries(f.scorers||{}).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`${escapeHtml(n)}${c>1?' ('+c+')':''}`).join(', ');
     const hasSquad = (f.squad||[]).length > 0;
     const hasTimerData = f.timer && f.timer.stints && f.timer.stints.length > 0;
+    const duty = f.coachDuty || [];
+    const avail = f.availability || {};
+    let ay=0, an=0, at=0;
+    roster.forEach(p=>{ const s = avail[p] || 'tbc'; if(s==='yes') ay++; else if(s==='no') an++; else at++; });
     return `
     <div class="fixture-card" data-id="${f.id}">
       <div class="fixture-top">
@@ -2702,12 +2760,16 @@ function renderFixtures(){
       <div class="fixture-meta">${f.date ? formatDate(f.date) : 'Date TBC'}${f.time ? ', '+escapeHtml(f.time) : ''}</div>
       ${f.venue ? `<div class="fixture-meta">${escapeHtml(f.venue)}</div>` : ''}
       ${f.competition ? `<div class="fixture-meta">${escapeHtml(f.competition)}</div>` : ''}
+      <div class="fixture-meta"><b>Duty:</b> ${duty.length ? escapeHtml(duty.join(' & ')) : 'not set'}</div>
+      ${roster.length ? `<div class="fixture-meta"><b>Availability:</b> ${ay} yes · ${an} no · ${at} tbc</div>` : ''}
       <div class="fixture-meta"><b>Squad:</b> ${hasSquad ? (f.squad||[]).length+' selected' : 'not set'}</div>
       ${f.played ? `<div class="fixture-meta">${scorersList ? '<b>Scorers:</b> '+scorersList : ''}${f.potm ? ' · <b>POTW:</b> '+escapeHtml(f.potm) : ''}</div>` : ''}
       ${hasTimerData ? `<div class="fixture-meta">${f.timer.running ? '⏱ Timer running' : (f.timer.finalized ? '⏱ Playing time logged' : '⏱ Timer paused, not finalised')}</div>` : ''}
       ${f.notes ? `<div class="gc-notes">${escapeHtml(f.notes)}</div>` : ''}
       <div class="fixture-actions">
         <button class="btn-mini fx-setup" data-id="${f.id}">Setup</button>
+        <button class="btn-mini fx-duty" data-id="${f.id}">Duty</button>
+        <button class="btn-mini fx-avail" data-id="${f.id}">Availability</button>
         <button class="btn-mini fx-squad" data-id="${f.id}">Squad</button>
         <button class="btn-mini fx-timer" data-id="${f.id}" ${hasSquad ? '' : 'disabled style="opacity:.45;"'}>${hasTimerData ? 'Timer ▸' : 'Start Timer'}</button>
         <button class="btn-mini fx-result" data-id="${f.id}">${f.played ? 'Edit Result' : 'Record Result'}</button>
@@ -2719,6 +2781,8 @@ function renderFixtures(){
   }).join('');
 
   wrap.querySelectorAll('.fx-setup').forEach(b=> b.onclick = () => openFixtureSetup(b.dataset.id));
+  wrap.querySelectorAll('.fx-duty').forEach(b=> b.onclick = () => openFixtureDuty(b.dataset.id));
+  wrap.querySelectorAll('.fx-avail').forEach(b=> b.onclick = () => openFixtureAvailability(b.dataset.id));
   wrap.querySelectorAll('.fx-squad').forEach(b=> b.onclick = () => openFixtureSquad(b.dataset.id));
   wrap.querySelectorAll('.fx-timer').forEach(b=> b.onclick = () => { if(!b.disabled) openTimerSheet(b.dataset.id); });
   wrap.querySelectorAll('.fx-result').forEach(b=> b.onclick = () => openFixtureResult(b.dataset.id));
@@ -2774,7 +2838,8 @@ document.getElementById('fxSave').onclick = () => {
     list.push({
       id: 'fx-'+Date.now()+'-'+Math.floor(Math.random()*1000),
       opponent, date, time, venue, competition, matchLengthMins, playersPerSide, friendly, homeAway: fxHomeAwayValue,
-      squad: [], played: false, scoreUs: 0, scoreThem: 0, scorers: {}, potm: '', notes: '', leagueApplied: false
+      squad: [], played: false, scoreUs: 0, scoreThem: 0, scorers: {}, potm: '', notes: '', leagueApplied: false,
+      coachDuty: [], availability: {}
     });
   }
   persistFixtures();
@@ -2848,6 +2913,119 @@ document.getElementById('squadSave').onclick = () => {
   }
   document.getElementById('squadBackdrop').classList.remove('open');
   showToast('Squad saved');
+  renderFixtures();
+};
+
+// -- Coach Duty sheet --
+let dutyEditFixtureId = null;
+let dutyDraft = [];
+function openFixtureDuty(id){
+  dutyEditFixtureId = id;
+  const f = fixtures[activeFixtureTeam].find(x=>x.id===id);
+  if(!f) return;
+  dutyDraft = (f.coachDuty || []).slice();
+  document.getElementById('dutySheetTitle').textContent = 'Coaches on Duty — ' + (f.opponent || 'Fixture');
+  renderDutySheet();
+  document.getElementById('dutyBackdrop').classList.add('open');
+}
+function renderDutySheet(){
+  const teamCoaches = coachesFor(activeFixtureTeam);
+  const wrap = document.getElementById('dutyCoachesList');
+  if(teamCoaches.length === 0){
+    wrap.innerHTML = `<div class="empty"><h3>No coaches yet</h3><p>Add coaches from the Session tab first.</p></div>`;
+  } else {
+    wrap.innerHTML = `<div class="attend-list">` + teamCoaches.map(c=>{
+      const checked = dutyDraft.includes(c) ? 'checked' : '';
+      return `<div class="attend-row"><input type="checkbox" class="duty-check" data-name="${escapeAttr(c)}" ${checked}><span class="att-name">${escapeHtml(c)}</span></div>`;
+    }).join('') + `</div>`;
+  }
+  wrap.querySelectorAll('.duty-check').forEach(chk=>{
+    chk.onchange = () => {
+      const name = chk.dataset.name;
+      if(chk.checked){ if(!dutyDraft.includes(name)) dutyDraft.push(name); }
+      else { dutyDraft = dutyDraft.filter(n=>n!==name); }
+    };
+  });
+}
+document.getElementById('dutyCancel').onclick = () => document.getElementById('dutyBackdrop').classList.remove('open');
+document.getElementById('dutyBackdrop').onclick = (e) => { if(e.target===document.getElementById('dutyBackdrop')) document.getElementById('dutyBackdrop').classList.remove('open'); };
+document.getElementById('dutySave').onclick = () => {
+  const f = fixtures[activeFixtureTeam].find(x=>x.id===dutyEditFixtureId);
+  if(f){
+    f.coachDuty = dutyDraft.slice();
+    persistFixtures();
+  }
+  document.getElementById('dutyBackdrop').classList.remove('open');
+  showToast('Duty saved');
+  renderFixtures();
+};
+
+// -- Player Availability sheet --
+let availEditFixtureId = null;
+let availDraft = {};
+function openFixtureAvailability(id){
+  availEditFixtureId = id;
+  const f = fixtures[activeFixtureTeam].find(x=>x.id===id);
+  if(!f) return;
+  availDraft = Object.assign({}, f.availability || {});
+  document.getElementById('availSheetTitle').textContent = 'Availability — ' + (f.opponent || 'Fixture');
+  renderAvailabilitySheet();
+  document.getElementById('availBackdrop').classList.add('open');
+}
+function renderAvailabilitySheet(){
+  const roster = fixtureRoster(activeFixtureTeam);
+  const wrap = document.getElementById('availPlayersList');
+  if(roster.length === 0){
+    wrap.innerHTML = `<div class="empty"><h3>No players yet</h3><p>Add players via the Squad screen first.</p></div>`;
+  } else {
+    wrap.innerHTML = `<div class="attend-list">` + roster.map(p=>{
+      const status = availDraft[p] || 'tbc';
+      return `<div class="avail-row" data-name="${escapeAttr(p)}">
+        <span class="att-name">${escapeHtml(p)}</span>
+        <div class="avail-toggle">
+          <button class="avail-btn ${status==='yes'?'active-yes':''}" data-status="yes">Yes</button>
+          <button class="avail-btn ${status==='no'?'active-no':''}" data-status="no">No</button>
+          <button class="avail-btn ${status==='tbc'?'active-tbc':''}" data-status="tbc">TBC</button>
+        </div>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+  wrap.querySelectorAll('.avail-row').forEach(row=>{
+    const name = row.dataset.name;
+    row.querySelectorAll('.avail-btn').forEach(btn=>{
+      btn.onclick = () => {
+        availDraft[name] = btn.dataset.status;
+        renderAvailabilitySheet();
+        updateAvailTally();
+      };
+    });
+  });
+  updateAvailTally();
+}
+function updateAvailTally(){
+  const roster = fixtureRoster(activeFixtureTeam);
+  let ay=0, an=0, at=0;
+  roster.forEach(p=>{ const s = availDraft[p] || 'tbc'; if(s==='yes') ay++; else if(s==='no') an++; else at++; });
+  document.getElementById('availTally').innerHTML = `<span><b>${ay}</b> yes</span><span><b>${an}</b> no</span><span><b>${at}</b> tbc</span>`;
+}
+document.getElementById('availAllYesBtn').onclick = () => {
+  fixtureRoster(activeFixtureTeam).forEach(p=> availDraft[p] = 'yes');
+  renderAvailabilitySheet();
+};
+document.getElementById('availResetBtn').onclick = () => {
+  fixtureRoster(activeFixtureTeam).forEach(p=> availDraft[p] = 'tbc');
+  renderAvailabilitySheet();
+};
+document.getElementById('availCancel').onclick = () => document.getElementById('availBackdrop').classList.remove('open');
+document.getElementById('availBackdrop').onclick = (e) => { if(e.target===document.getElementById('availBackdrop')) document.getElementById('availBackdrop').classList.remove('open'); };
+document.getElementById('availSave').onclick = () => {
+  const f = fixtures[activeFixtureTeam].find(x=>x.id===availEditFixtureId);
+  if(f){
+    f.availability = Object.assign({}, availDraft);
+    persistFixtures();
+  }
+  document.getElementById('availBackdrop').classList.remove('open');
+  showToast('Availability saved');
   renderFixtures();
 };
 
