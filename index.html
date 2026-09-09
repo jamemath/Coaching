@@ -750,6 +750,7 @@
     </div>
   </div>
   <div id="fixturesList"></div>
+  <button class="btn btn-ghost" id="fixtureImportBtn" style="width:100%; margin-top:12px;">Paste Availability / Duty</button>
   <div class="hint" style="margin-top:8px;">Tap + to add a fixture. Setup edits the match details, Squad picks who's playing, and Record Result logs the score, scorers and Player of the Week — league results (non-friendly) update the League table automatically for your team and the opponent, if they're in it.</div>
 </section>
 
@@ -896,6 +897,26 @@ Collyhurst Youth JFC U15 Blue, 0, 0, 0, 0, 0"></textarea>
     <div class="sheet-actions">
       <button class="btn btn-ghost" id="leagueEditCancel">Cancel</button>
       <button class="btn btn-primary" id="leagueEditSave">Save Table</button>
+    </div>
+  </div>
+</div>
+
+<!-- Availability / Duty bulk import sheet -->
+<div class="sheet-backdrop" id="availImportBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2 id="availImportSheetTitle">Paste Availability / Duty</h2>
+    <div class="field">
+      <label>One grid at a time</label>
+      <textarea id="availImportPasteText" style="min-height:220px;" placeholder="05 September 2026	12 Sep	19 Sep	26 Sep
+Dave	1	1	1	0
+James	1	1	1	1"></textarea>
+      <div class="hint">Copy straight from the sheet: first line is the dates, then one line per name with their 1/0 values for each date — works for coach or player rows, it matches names against your existing rosters automatically. Rows of pairings like "Dave &amp; James" are picked up as the Duty rota automatically, whatever the row's labelled. A row of kick-off times like "11 A" / "10:45 A" / "TBC" is picked up too and sets time + home/away. A row labelled "game" (e.g. "Seeding game", "Cup QF", "No game") fills in a placeholder opponent on new fixtures. Dates don't need to be in order — Jan/Feb/Mar/Apr/May/Jun dates are read as the season's second half automatically, so cup dates pasted ahead of the league run still land in the right year.</div>
+    </div>
+    <div id="availImportPreview" class="hint" style="margin-top:8px;"></div>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="availImportCancel">Cancel</button>
+      <button class="btn btn-primary" id="availImportSave">Import</button>
     </div>
   </div>
 </div>
@@ -2724,6 +2745,187 @@ document.getElementById('leagueEditSave').onclick = () => {
   leagueBackdrop.classList.remove('open');
   showToast('Table saved');
   renderLeague();
+};
+
+// ---- Availability / Duty bulk import ----
+const MONTHS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+const DATE_CELL_RE = /^(\d{1,2})\w{0,2}\s+([A-Za-z]{3,})[a-z]*\.?,?\s*(\d{4})?$/;
+// A youth football season runs roughly Aug/Sep through the following May/June.
+// Jan–Jun dates belong to the back half of the season (the year AFTER the
+// season's anchor year); Jul–Dec dates belong to the front half (the anchor
+// year itself). This makes year inference independent of column order, so
+// cup dates pasted ahead of league dates (e.g. "17 January" before
+// "05 September 2026") still resolve to the correct calendar year.
+function computeSeasonAnchorYear(headerCells){
+  for(const c of headerCells){
+    const m = (c||'').trim().match(DATE_CELL_RE);
+    if(m && m[3]){
+      const monthIdx = MONTHS.indexOf(m[2].slice(0,3).toLowerCase());
+      if(monthIdx !== -1){
+        const yr = parseInt(m[3],10);
+        return monthIdx >= 6 ? yr : yr - 1;
+      }
+    }
+  }
+  const today = new Date();
+  return today.getMonth() >= 6 ? today.getFullYear() : today.getFullYear() - 1;
+}
+function parseHeaderDate(text, anchorYear){
+  const t = (text||'').trim();
+  if(!t) return null;
+  const m = t.match(DATE_CELL_RE);
+  if(!m) return null;
+  const day = parseInt(m[1],10);
+  const monKey = m[2].slice(0,3).toLowerCase();
+  const monthIdx = MONTHS.indexOf(monKey);
+  if(monthIdx === -1 || day < 1 || day > 31) return null;
+  const year = m[3] ? parseInt(m[3],10) : (monthIdx >= 6 ? anchorYear : anchorYear + 1);
+  const mm = String(monthIdx+1).padStart(2,'0');
+  const dd = String(day).padStart(2,'0');
+  return `${year}-${mm}-${dd}`;
+}
+function splitPastedLine(line){
+  if(line.indexOf('\t') !== -1) return line.split('\t').map(c=>c.trim());
+  return line.split(',').map(c=>c.trim());
+}
+function findRosterName(name, roster){
+  const n = name.trim().toLowerCase();
+  return roster.find(r=>r.toLowerCase()===n) || null;
+}
+function findOrCreateFixtureByDate(team, iso){
+  let f = fixtures[team].find(x=>x.date===iso);
+  if(!f){
+    f = {
+      id: 'fx-'+Date.now()+'-'+Math.floor(Math.random()*1000),
+      opponent: 'TBC', date: iso, time:'', venue:'', competition: defaultCompetition(team), friendly:false,
+      matchLengthMins:0, playersPerSide:0, homeAway:'home',
+      squad: [], played: false, scoreUs: 0, scoreThem: 0, scorers: {}, potm: '', notes: '', leagueApplied: false,
+      coachDuty: [], coachAvailability: {}, availability: {}
+    };
+    fixtures[team].push(f);
+  }
+  return f;
+}
+function looksLikeDutyRow(label, dataCells){
+  if(/^duty$|^rota$/i.test(label)) return true;
+  const nonEmpty = dataCells.filter(c=>c && c.trim());
+  if(nonEmpty.length === 0) return false;
+  const pairLike = nonEmpty.filter(c=>/\s(?:&|and)\s/i.test(c));
+  return pairLike.length >= Math.max(1, Math.ceil(nonEmpty.length*0.5));
+}
+function looksLikeTimeRow(label, dataCells){
+  if(/time/i.test(label)) return true;
+  const nonEmpty = dataCells.filter(c=>c && c.trim());
+  if(nonEmpty.length === 0) return false;
+  const timeLike = nonEmpty.filter(c=>/^\d{1,2}(:\d{2})?\s*[HA]$/i.test(c.trim()) || /^tbc$/i.test(c.trim()) || /no game/i.test(c.trim()));
+  return timeLike.length >= Math.max(1, Math.ceil(nonEmpty.length*0.5));
+}
+function parseTimeHA(raw){
+  const m = raw.trim().match(/^(\d{1,2}(?::\d{2})?)\s*([HA])$/i);
+  if(!m) return null;
+  return { time: m[1], homeAway: m[2].toUpperCase()==='H' ? 'home' : 'away' };
+}
+function runAvailabilityImport(text){
+  const lines = text.split('\n').map(l=>l.replace(/\r/g,'')).filter(l=>l.trim().length>0);
+  if(lines.length < 2) return { error: 'Paste a date row plus at least one name row.' };
+  const headerCells = splitPastedLine(lines[0]);
+  const anchorYear = computeSeasonAnchorYear(headerCells.slice(1));
+  const dateCols = [];
+  for(let i=1;i<headerCells.length;i++){
+    const iso = parseHeaderDate(headerCells[i], anchorYear);
+    if(iso) dateCols.push({ idx:i, iso });
+  }
+  if(dateCols.length === 0) return { error: "Couldn't read any dates from the first line." };
+
+  const team = activeFixtureTeam;
+  const teamCoaches = coachesFor(team);
+  const teamRoster = fixtureRoster(team);
+  let coachRows=0, playerRows=0, dutyCells=0, timeCells=0, gameCells=0, skippedRows=[], newFixtures=0;
+
+  for(let r=1;r<lines.length;r++){
+    const cells = splitPastedLine(lines[r]);
+    const label = (cells[0]||'').trim();
+    if(!label) continue;
+    const dataCells = cells.slice(1);
+    const gameRow = /^game$/i.test(label);
+    const dutyRow = !gameRow && looksLikeDutyRow(label, dataCells);
+    const timeRow = !gameRow && !dutyRow && looksLikeTimeRow(label, dataCells);
+    const coachName = (gameRow||dutyRow||timeRow) ? null : findRosterName(label, teamCoaches);
+    const playerName = (gameRow||dutyRow||timeRow||coachName) ? null : findRosterName(label, teamRoster);
+    if(!gameRow && !dutyRow && !timeRow && !coachName && !playerName){ skippedRows.push(label); continue; }
+    if(coachName) coachRows++;
+    if(playerName) playerRows++;
+
+    dateCols.forEach(({idx, iso})=>{
+      const raw = (cells[idx]||'').trim();
+      if(!raw) return;
+      if(gameRow){
+        if(!/^tbc$/i.test(raw) && !/no game/i.test(raw)){
+          const existedBefore = !!fixtures[team].find(x=>x.date===iso);
+          const f = findOrCreateFixtureByDate(team, iso);
+          if(!existedBefore) newFixtures++;
+          if(!f.opponent || f.opponent === 'TBC'){ f.opponent = raw; gameCells++; }
+        }
+      } else if(dutyRow){
+        const names = raw.split(/\s*(?:&|,|\band\b)\s*/i).map(n=>n.trim()).filter(Boolean)
+          .map(n=>findRosterName(n, teamCoaches)).filter(Boolean);
+        if(names.length){
+          const existedBefore = !!fixtures[team].find(x=>x.date===iso);
+          const f = findOrCreateFixtureByDate(team, iso);
+          if(!existedBefore) newFixtures++;
+          f.coachDuty = names;
+          dutyCells++;
+        }
+      } else if(timeRow){
+        const parsed = parseTimeHA(raw);
+        if(parsed){
+          const existedBefore = !!fixtures[team].find(x=>x.date===iso);
+          const f = findOrCreateFixtureByDate(team, iso);
+          if(!existedBefore) newFixtures++;
+          f.time = parsed.time;
+          f.homeAway = parsed.homeAway;
+          timeCells++;
+        }
+      } else {
+        const status = (raw==='1') ? 'yes' : (raw==='0') ? 'no' : null;
+        if(!status) return;
+        const existedBefore = !!fixtures[team].find(x=>x.date===iso);
+        const f = findOrCreateFixtureByDate(team, iso);
+        if(!existedBefore) newFixtures++;
+        if(coachName){ if(!f.coachAvailability) f.coachAvailability={}; f.coachAvailability[coachName] = status; }
+        else if(playerName){ if(!f.availability) f.availability={}; f.availability[playerName] = status; }
+      }
+    });
+  }
+
+  persistFixtures();
+  return { ok:true, dates: dateCols.length, coachRows, playerRows, dutyCells, timeCells, gameCells, newFixtures, skippedRows };
+}
+
+const availImportBackdrop = document.getElementById('availImportBackdrop');
+document.getElementById('fixtureImportBtn').onclick = () => {
+  document.getElementById('availImportPasteText').value = '';
+  document.getElementById('availImportPreview').textContent = '';
+  availImportBackdrop.classList.add('open');
+};
+document.getElementById('availImportCancel').onclick = () => availImportBackdrop.classList.remove('open');
+availImportBackdrop.onclick = (e) => { if(e.target === availImportBackdrop) availImportBackdrop.classList.remove('open'); };
+document.getElementById('availImportSave').onclick = () => {
+  const text = document.getElementById('availImportPasteText').value;
+  const result = runAvailabilityImport(text);
+  if(result.error){ document.getElementById('availImportPreview').textContent = result.error; return; }
+  let msg = `Imported ${result.dates} date${result.dates===1?'':'s'}`;
+  if(result.coachRows) msg += ` · ${result.coachRows} coach row${result.coachRows===1?'':'s'}`;
+  if(result.playerRows) msg += ` · ${result.playerRows} player row${result.playerRows===1?'':'s'}`;
+  if(result.dutyCells) msg += ` · duty set for ${result.dutyCells} date${result.dutyCells===1?'':'s'}`;
+  if(result.timeCells) msg += ` · kick-off/H-A set for ${result.timeCells} date${result.timeCells===1?'':'s'}`;
+  if(result.gameCells) msg += ` · opponent label set for ${result.gameCells} date${result.gameCells===1?'':'s'}`;
+  if(result.newFixtures) msg += ` · ${result.newFixtures} new fixture${result.newFixtures===1?'':'s'} created`;
+  if(result.skippedRows.length) msg += `. Skipped (no name match): ${result.skippedRows.join(', ')}`;
+  showToast('Import complete', 2600);
+  document.getElementById('availImportPreview').textContent = msg;
+  renderFixtures();
+  setTimeout(()=> availImportBackdrop.classList.remove('open'), 1400);
 };
 
 // ---- Fixtures ----
