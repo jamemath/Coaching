@@ -1537,6 +1537,11 @@ function formatDate(iso){
   if(isNaN(d)) return iso;
   return d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
 }
+function formatDateShort(iso){
+  const d = new Date(iso+'T00:00:00');
+  if(isNaN(d)) return iso;
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+}
 
 function loadDrills(){
   try{
@@ -2825,34 +2830,50 @@ function parseTimeHA(raw){
   if(!m) return null;
   return { time: m[1], homeAway: m[2].toUpperCase()==='H' ? 'home' : 'away' };
 }
+function findHeaderRowIndex(lines){
+  for(let i=0;i<lines.length;i++){
+    const cells = splitPastedLine(lines[i]);
+    let count = 0;
+    for(let j=1;j<cells.length;j++){ if(DATE_CELL_RE.test((cells[j]||'').trim())) count++; }
+    if(count >= 3) return i;
+  }
+  return -1;
+}
 function runAvailabilityImport(text){
   const lines = text.split('\n').map(l=>l.replace(/\r/g,'')).filter(l=>l.trim().length>0);
   if(lines.length < 2) return { error: 'Paste a date row plus at least one name row.' };
-  const headerCells = splitPastedLine(lines[0]);
+  const headerRowIdx = findHeaderRowIndex(lines);
+  if(headerRowIdx === -1) return { error: "Couldn't find a line with dates on it — check a date column reads like \"12 Sep\" or \"05 September 2026\"." };
+  const headerCells = splitPastedLine(lines[headerRowIdx]);
   const anchorYear = computeSeasonAnchorYear(headerCells.slice(1));
   const dateCols = [];
   for(let i=1;i<headerCells.length;i++){
     const iso = parseHeaderDate(headerCells[i], anchorYear);
     if(iso) dateCols.push({ idx:i, iso });
   }
-  if(dateCols.length === 0) return { error: "Couldn't read any dates from the first line." };
+  if(dateCols.length === 0) return { error: "Couldn't read any dates from the header line." };
 
   const team = activeFixtureTeam;
   const teamCoaches = coachesFor(team);
   const teamRoster = fixtureRoster(team);
   let coachRows=0, playerRows=0, dutyCells=0, timeCells=0, gameCells=0, skippedRows=[], newFixtures=0;
 
-  for(let r=1;r<lines.length;r++){
+  for(let r=headerRowIdx+1;r<lines.length;r++){
     const cells = splitPastedLine(lines[r]);
     const label = (cells[0]||'').trim();
-    if(!label) continue;
     const dataCells = cells.slice(1);
+    // Rows are classified by content first (pairings, times), so a row with
+    // no text in column A — common when a spreadsheet label cell is blank —
+    // still gets picked up correctly rather than skipped outright.
     const gameRow = /^game$/i.test(label);
     const dutyRow = !gameRow && looksLikeDutyRow(label, dataCells);
     const timeRow = !gameRow && !dutyRow && looksLikeTimeRow(label, dataCells);
-    const coachName = (gameRow||dutyRow||timeRow) ? null : findRosterName(label, teamCoaches);
-    const playerName = (gameRow||dutyRow||timeRow||coachName) ? null : findRosterName(label, teamRoster);
-    if(!gameRow && !dutyRow && !timeRow && !coachName && !playerName){ skippedRows.push(label); continue; }
+    const coachName = (!label||gameRow||dutyRow||timeRow) ? null : findRosterName(label, teamCoaches);
+    const playerName = (!label||gameRow||dutyRow||timeRow||coachName) ? null : findRosterName(label, teamRoster);
+    if(!gameRow && !dutyRow && !timeRow && !coachName && !playerName){
+      if(label) skippedRows.push(label);
+      continue;
+    }
     if(coachName) coachRows++;
     if(playerName) playerRows++;
 
@@ -3933,20 +3954,20 @@ function renderSummary(){
   if(allFixtures.length > 0){
     const dutySplit = teamCoaches.map(c => ({ name:c, n: allFixtures.filter(f=>(f.coachDuty||[]).includes(c)).length }))
       .sort((a,b)=> a.n-b.n || a.name.localeCompare(b.name));
-    const coachMisses = teamCoaches.map(c => ({ name:c, n: allFixtures.filter(f=>(f.coachAvailability||{})[c]==='no').length }))
-      .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
-    const playerMisses = roster.map(p => ({ name:p, n: allFixtures.filter(f=>(f.availability||{})[p]==='no').length }))
-      .sort((a,b)=> b.n-a.n || a.name.localeCompare(b.name));
+    const coachMisses = teamCoaches.map(c => ({ name:c, dates: allFixtures.filter(f=>(f.coachAvailability||{})[c]==='no').map(f=>f.date).sort() }))
+      .sort((a,b)=> b.dates.length-a.dates.length || a.name.localeCompare(b.name));
+    const playerMisses = roster.map(p => ({ name:p, dates: allFixtures.filter(f=>(f.availability||{})[p]==='no').map(f=>f.date).sort() }))
+      .sort((a,b)=> b.dates.length-a.dates.length || a.name.localeCompare(b.name));
 
     if(teamCoaches.length > 0){
       html += summarySection('dutySplit', 'Coach Duty Split — fewest first',
         dutySplit.map(d => `<div class="summary-row"><span class="sr-name">${escapeHtml(d.name)}</span><span class="sr-val">${d.n}/${allFixtures.length}</span></div>`).join(''));
-      html += summarySection('coachMisses', 'Coaches Down to Miss',
-        coachMisses.some(x=>x.n>0) ? coachMisses.filter(x=>x.n>0).map(d => `<div class="summary-row"><span class="sr-name">${escapeHtml(d.name)}</span><span class="sr-val">${d.n} fixture${d.n===1?'':'s'}</span></div>`).join('') : `<div class="summary-row"><span class="sr-name">Nobody's flagged as missing yet</span></div>`);
+      html += summarySection('coachMisses', 'Coaches Down to Miss — which dates',
+        coachMisses.some(x=>x.dates.length>0) ? coachMisses.filter(x=>x.dates.length>0).map(d => `<div class="summary-row"><span class="sr-name">${escapeHtml(d.name)}</span><span class="sr-val">${d.dates.map(formatDateShort).join(', ')}</span></div>`).join('') : `<div class="summary-row"><span class="sr-name">Nobody's flagged as missing yet</span></div>`);
     }
     if(roster.length > 0){
-      html += summarySection('playerMisses', 'Players Down to Miss',
-        playerMisses.some(x=>x.n>0) ? playerMisses.filter(x=>x.n>0).map(d => `<div class="summary-row"><span class="sr-name">${escapeHtml(d.name)}</span><span class="sr-val">${d.n} fixture${d.n===1?'':'s'}</span></div>`).join('') : `<div class="summary-row"><span class="sr-name">Nobody's flagged as missing yet</span></div>`);
+      html += summarySection('playerMisses', 'Players Down to Miss — which dates',
+        playerMisses.some(x=>x.dates.length>0) ? playerMisses.filter(x=>x.dates.length>0).map(d => `<div class="summary-row"><span class="sr-name">${escapeHtml(d.name)}</span><span class="sr-val">${d.dates.map(formatDateShort).join(', ')}</span></div>`).join('') : `<div class="summary-row"><span class="sr-name">Nobody's flagged as missing yet</span></div>`);
     }
   }
 
