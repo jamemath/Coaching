@@ -463,6 +463,10 @@
   }
   .timer-progress-fill.over{ background: var(--red); }
   .timer-clock-actions{ display:flex; gap:10px; }
+  .timer-section-label{
+    font-family: var(--font-display); text-transform:uppercase; font-size:11px; font-weight:700; letter-spacing:0.4px;
+    color: var(--ink-soft); padding:10px 4px 5px;
+  }
   .timer-row{
     display:flex; align-items:center; gap:8px; padding:9px 4px; border-bottom:1px solid var(--chalk-line);
   }
@@ -538,12 +542,17 @@
   .pitch-row{ display:flex; justify-content:space-evenly; align-items:center; flex-wrap:wrap; gap:6px; margin-top:22px; }
   .pitch-row:first-of-type{ margin-top:30px; }
   .pitch-blob{
-    position:relative;
+    position:relative; cursor:pointer;
     width:54px; height:54px; border-radius:50%; background: linear-gradient(160deg, #3B6FD1, #2952A3);
     display:flex; align-items:center; justify-content:center; text-align:center;
     color:#fff; font-family: var(--font-display); font-weight:700; font-size:11px; line-height:1.1;
     border:2px solid rgba(255,255,255,0.55); box-shadow:0 2px 6px rgba(0,0,0,0.25); padding:2px; word-break:break-word;
   }
+  .pitch-blob.pending{
+    border-color: var(--gold); box-shadow:0 0 0 3px rgba(242,199,68,0.4);
+    animation: pendingPulse 1s ease-in-out infinite;
+  }
+  @keyframes pendingPulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.6; } }
   .pitch-blob-pos{
     position:absolute; bottom:-8px; left:50%; transform:translateX(-50%);
     background: rgba(0,0,0,0.6); color:#fff; font-size:8px; font-weight:700;
@@ -1085,7 +1094,7 @@ James	1	1	1	1"></textarea>
       <div id="timerGoalLog"></div>
     </div>
     <div id="pitchViewWrap"></div>
-    <div class="hint" style="margin:10px 0 4px;">Tap Pitch/Sub to swap a player on or off, tap again to reverse it. Change their position any time — it splits into a new stint with no time lost.</div>
+    <div class="hint" style="margin:10px 0 4px;">Tap a player on the pitch above to bring them off, or a bench player to bring them on. If the pitch is full, tap a bench player then tap who they're replacing. The list below still works too, and lets you fine-tune position any time — nothing loses its time when you do.</div>
     <div id="timerPlayersList"></div>
     <div class="sheet-actions" style="margin-top:16px;">
       <button class="btn btn-ghost" id="timerCloseBtn">Save &amp; Close</button>
@@ -3400,6 +3409,7 @@ const POSITION_ORDER = {};    // left-to-right order within a row
 POSITION_GROUPS.forEach(g => g.options.forEach((p, i) => { POSITION_CATEGORY[p] = g.label; POSITION_ORDER[p] = i; }));
 let timerFixtureId = null;
 let timerTickHandle = null;
+let subPending = null; // name of a bench player waiting for an on-pitch partner to complete a swap
 
 function formatClock(totalSeconds){
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -3509,6 +3519,56 @@ function undoGoal(goalId){
   showToast('Goal removed');
 }
 
+// Fast substitution flow driven by tapping the pitch view directly, rather
+// than hunting through the player list. Tapping a bench player brings them
+// straight on if there's room; if the pitch is already full, it arms a
+// pending swap and the next on-pitch tap completes it (inheriting that
+// player's position, since it's normally a like-for-like swap). Tapping an
+// on-pitch player with nothing pending just takes them off on the spot.
+function blobTap(name){
+  const f = currentTimerFixture();
+  if(!f) return;
+  const t = ensureTimer(f);
+  const on = isPlayerOn(f, name);
+  const onCount = (f.squad||[]).filter(p=>isPlayerOn(f,p)).length;
+  const roomAvailable = !f.playersPerSide || onCount < f.playersPerSide;
+
+  if(subPending){
+    if(subPending === name){
+      subPending = null; // tapped the pending player again — cancel
+      renderTimerSheet();
+      return;
+    }
+    if(on){
+      // Complete the swap: this player comes off, the pending one comes on
+      // at the departing player's position.
+      const swapPos = t.lastPosition[name] || TIMER_POSITIONS[0];
+      togglePlayerOnOff(name);
+      t.lastPosition[subPending] = swapPos;
+      togglePlayerOnOff(subPending);
+      subPending = null;
+      return;
+    }
+    // Tapped a different bench player while one was pending — switch pick.
+    subPending = name;
+    renderTimerSheet();
+    return;
+  }
+
+  if(on){
+    togglePlayerOnOff(name); // single tap, straight off
+    return;
+  }
+
+  if(roomAvailable){
+    togglePlayerOnOff(name); // single tap, straight on
+  } else {
+    subPending = name;
+    showToast('Tap who\'s coming off to complete the swap', 3000);
+    renderTimerSheet();
+  }
+}
+
 function togglePlayerOnOff(name){
   const f = currentTimerFixture();
   if(!f) return;
@@ -3558,6 +3618,7 @@ function openTimerSheet(id){
   if((f.squad||[]).length === 0){ showToast('Select a squad first'); return; }
   ensureTimer(f);
   timerFixtureId = id;
+  subPending = null;
   document.getElementById('timerSheetTitle').textContent = 'Timer — ' + (f.opponent || 'Fixture');
   renderTimerSheet();
   document.getElementById('timerBackdrop').classList.add('open');
@@ -3566,6 +3627,7 @@ function openTimerSheet(id){
 
 function closeTimerSheet(){
   stopTimerTick();
+  subPending = null;
   document.getElementById('timerBackdrop').classList.remove('open');
   timerFixtureId = null;
   renderFixtures();
@@ -3596,7 +3658,7 @@ function renderPitchView(f, t){
   const overLimit = f.playersPerSide && onCount > f.playersPerSide;
   const formationLabel = f.playersPerSide ? `${onCount}/${f.playersPerSide} · ${formationShape}` : formationShape;
 
-  const blob = (name, pos, cls) => `<div class="pitch-blob ${cls||''}">${escapeHtml(firstName(name))}${pos ? `<span class="pitch-blob-pos">${pos}</span>` : ''}</div>`;
+  const blob = (name, pos, cls) => `<div class="pitch-blob ${cls||''}${subPending===name?' pending':''}" data-name="${escapeAttr(name)}">${escapeHtml(firstName(name))}${pos ? `<span class="pitch-blob-pos">${pos}</span>` : ''}</div>`;
   const rowHtml = (entries) => entries.length ? `<div class="pitch-row">${entries.map(e=>blob(e.name, e.pos)).join('')}</div>` : '';
 
   const secs = squad.map(p => playerMatchSeconds(f, p));
@@ -3696,10 +3758,13 @@ function renderTimerSheet(){
   }
 
   document.getElementById('pitchViewWrap').innerHTML = renderPitchView(f, t);
+  document.querySelectorAll('.pitch-blob[data-name]').forEach(el=>{
+    el.onclick = () => blobTap(el.dataset.name);
+  });
 
   const wrap = document.getElementById('timerPlayersList');
   const squad = f.squad || [];
-  wrap.innerHTML = `<div class="attend-list">` + squad.map(name=>{
+  const rowHtml = (name) => {
     const on = isPlayerOn(f, name);
     const pos = t.lastPosition[name] || TIMER_POSITIONS[0];
     const sec = playerMatchSeconds(f, name);
@@ -3713,7 +3778,14 @@ function renderTimerSheet(){
         <span class="timer-time">${formatClock(sec)}</span>
       </div>
     `;
-  }).join('') + `</div>`;
+  };
+  const onSquad = squad.filter(name => isPlayerOn(f, name));
+  const benchSquad = squad.filter(name => !isPlayerOn(f, name))
+    .sort((a,b) => playerMatchSeconds(f,a) - playerMatchSeconds(f,b));
+  wrap.innerHTML = `<div class="attend-list">`
+    + (onSquad.length ? `<div class="timer-section-label">On Pitch (${onSquad.length})</div>` + onSquad.map(rowHtml).join('') : '')
+    + (benchSquad.length ? `<div class="timer-section-label">Bench — least time first (${benchSquad.length})</div>` + benchSquad.map(rowHtml).join('') : '')
+    + `</div>`;
 
   wrap.querySelectorAll('.timer-onoff').forEach(btn=>{
     btn.onclick = () => togglePlayerOnOff(btn.dataset.name);
