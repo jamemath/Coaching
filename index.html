@@ -3606,7 +3606,7 @@ function setPlayerPosition(name, newPosition){
 
 function startTimerTick(){
   stopTimerTick();
-  timerTickHandle = setInterval(renderTimerSheet, 1000);
+  timerTickHandle = setInterval(tickUpdate, 1000);
 }
 function stopTimerTick(){
   if(timerTickHandle){ clearInterval(timerTickHandle); timerTickHandle = null; }
@@ -3628,9 +3628,17 @@ function openTimerSheet(id){
 function closeTimerSheet(){
   stopTimerTick();
   subPending = null;
+  const justClosedId = timerFixtureId;
   document.getElementById('timerBackdrop').classList.remove('open');
   timerFixtureId = null;
   renderFixtures();
+  returnToFixtureCard(justClosedId);
+}
+
+function returnToFixtureCard(id){
+  if(!id) return;
+  const card = document.querySelector(`.fixture-card[data-id="${id}"]`);
+  if(card) card.scrollIntoView({ block:'center' });
 }
 
 document.getElementById('timerHalf').onclick = () => {
@@ -3641,6 +3649,38 @@ document.getElementById('timerHalf').onclick = () => {
   persistFixtures();
   renderTimerSheet();
 };
+
+// Ranks the whole squad by total time played this match into three tiers —
+// used to colour-code both the pitch view and the player list, so at a
+// glance you can see who needs time and who's had plenty.
+function computeTimeTiers(f){
+  const t = ensureTimer(f);
+  const squad = (f.squad || []).filter(name => (t.lastPosition[name] || '') !== 'GK');
+  const n = squad.length;
+  const tiers = {};
+  squad.forEach(name => { tiers[name] = 'blue'; });
+  if(n === 0) return tiers;
+
+  const secs = squad.map(name => playerMatchSeconds(f, name));
+  const spread = Math.max(...secs) - Math.min(...secs);
+  if(spread <= 120) return tiers; // within 2 minutes of each other — too close to call, leave everyone blue
+
+  const sorted = squad.slice().sort((a,b) => playerMatchSeconds(f,a) - playerMatchSeconds(f,b) || a.localeCompare(b));
+  const redNames = new Set(sorted.slice(0, Math.min(3, n)));
+  const greenNames = new Set(sorted.slice(Math.max(0, n-3)).filter(name => !redNames.has(name)));
+  squad.forEach(name => { tiers[name] = redNames.has(name) ? 'red' : (greenNames.has(name) ? 'green' : 'blue'); });
+  return tiers;
+}
+function tierGradient(tier){
+  if(tier==='green') return 'linear-gradient(160deg, #4CAF6B, #2E7D42)';
+  if(tier==='red') return 'linear-gradient(160deg, #E2564C, #B23A32)';
+  return 'linear-gradient(160deg, #3B6FD1, #2952A3)';
+}
+function tierTextColor(tier){
+  if(tier==='green') return '#2E7D42';
+  if(tier==='red') return '#B23A32';
+  return '#2952A3';
+}
 
 function renderPitchView(f, t){
   const squad = f.squad || [];
@@ -3658,10 +3698,11 @@ function renderPitchView(f, t){
   const overLimit = f.playersPerSide && onCount > f.playersPerSide;
   const formationLabel = f.playersPerSide ? `${onCount}/${f.playersPerSide} · ${formationShape}` : formationShape;
 
-  const blob = (name, pos, cls) => `<div class="pitch-blob ${cls||''}${subPending===name?' pending':''}" data-name="${escapeAttr(name)}">${escapeHtml(firstName(name))}${pos ? `<span class="pitch-blob-pos">${pos}</span>` : ''}</div>`;
+  const tiers = computeTimeTiers(f);
+  const blob = (name, pos, cls) => `<div class="pitch-blob ${cls||''}${subPending===name?' pending':''}" data-name="${escapeAttr(name)}" style="background:${tierGradient(tiers[name])}">${escapeHtml(firstName(name))}${pos ? `<span class="pitch-blob-pos">${pos}</span>` : ''}</div>`;
   const rowHtml = (entries) => entries.length ? `<div class="pitch-row">${entries.map(e=>blob(e.name, e.pos)).join('')}</div>` : '';
 
-  const secs = squad.map(p => playerMatchSeconds(f, p));
+  const secs = squad.filter(p => (t.lastPosition[p] || '') !== 'GK').map(p => playerMatchSeconds(f, p));
   let fairnessHtml = '';
   if(secs.length){
     const avg = secs.reduce((a,b)=>a+b,0) / secs.length;
@@ -3708,6 +3749,62 @@ function checkHalfAutoStop(t, elapsed, targetSec){
     return true;
   }
   return false;
+}
+
+// Runs every second while the clock is live. Deliberately does NOT touch
+// the player list's <select> elements — rebuilding those mid-interaction
+// closes an open iOS picker before you can choose a position. Only the
+// clock, progress bar, pitch view (no form controls there) and each
+// player's time figure get refreshed in place; anything that structurally
+// changes the list (a sub, a position change, a goal) goes through the
+// full renderTimerSheet() instead, triggered by that specific action.
+function tickUpdate(){
+  const f = currentTimerFixture();
+  if(!f) return;
+  const t = ensureTimer(f);
+  let elapsed = getElapsedSeconds(f);
+  const targetSec = (f.matchLengthMins || 0) * 60;
+  if(checkHalfAutoStop(t, elapsed, targetSec)){
+    renderTimerSheet();
+    return;
+  }
+
+  const clockEl = document.getElementById('timerClock');
+  clockEl.textContent = formatClock(elapsed);
+
+  const subEl = document.getElementById('timerClockSub');
+  const track = document.getElementById('timerProgressTrack');
+  const fill = document.getElementById('timerProgressFill');
+  if(targetSec > 0){
+    const overBy = elapsed - targetSec;
+    subEl.textContent = overBy > 0 ? `+${formatClock(overBy)} over ${f.matchLengthMins} min` : `${formatClock(targetSec - elapsed)} remaining of ${f.matchLengthMins} min`;
+    track.style.display = 'block';
+    const pct = Math.min(100, (elapsed/targetSec)*100);
+    fill.style.width = pct + '%';
+    fill.classList.toggle('over', overBy > 0);
+    clockEl.classList.toggle('full-time', overBy >= 0);
+  } else {
+    subEl.textContent = '';
+    track.style.display = 'none';
+    clockEl.classList.remove('full-time');
+  }
+
+  document.getElementById('pitchViewWrap').innerHTML = renderPitchView(f, t);
+  document.querySelectorAll('.pitch-blob[data-name]').forEach(el=>{
+    el.onclick = () => blobTap(el.dataset.name);
+  });
+
+  const tiers = computeTimeTiers(f);
+  document.querySelectorAll('#timerPlayersList .timer-row').forEach(row=>{
+    const btn = row.querySelector('.timer-onoff');
+    if(!btn) return;
+    const name = btn.dataset.name;
+    const timeEl = row.querySelector('.timer-time');
+    if(timeEl){
+      timeEl.textContent = formatClock(playerMatchSeconds(f, name));
+      timeEl.style.color = tierTextColor(tiers[name]);
+    }
+  });
 }
 
 function renderTimerSheet(){
@@ -3764,6 +3861,7 @@ function renderTimerSheet(){
 
   const wrap = document.getElementById('timerPlayersList');
   const squad = f.squad || [];
+  const tiers = computeTimeTiers(f);
   const rowHtml = (name) => {
     const on = isPlayerOn(f, name);
     const pos = t.lastPosition[name] || TIMER_POSITIONS[0];
@@ -3775,11 +3873,19 @@ function renderTimerSheet(){
         <select class="timer-pos" data-name="${escapeAttr(name)}">
           ${POSITION_GROUPS.map(g=>`<optgroup label="${g.label}">${g.options.map(p=>`<option value="${p}" ${p===pos?'selected':''}>${p}</option>`).join('')}</optgroup>`).join('')}
         </select>
-        <span class="timer-time">${formatClock(sec)}</span>
+        <span class="timer-time" style="color:${tierTextColor(tiers[name])}; font-weight:800;">${formatClock(sec)}</span>
       </div>
     `;
   };
-  const onSquad = squad.filter(name => isPlayerOn(f, name));
+  const CATEGORY_RANK = { GK:0, DEF:1, MID:2, FWD:3 };
+  const onSquad = squad.filter(name => isPlayerOn(f, name))
+    .sort((a,b) => {
+      const posA = t.lastPosition[a] || 'CM', posB = t.lastPosition[b] || 'CM';
+      const catA = CATEGORY_RANK[POSITION_CATEGORY[posA] || 'MID'];
+      const catB = CATEGORY_RANK[POSITION_CATEGORY[posB] || 'MID'];
+      if(catA !== catB) return catA - catB;
+      return (POSITION_ORDER[posA] ?? 0) - (POSITION_ORDER[posB] ?? 0);
+    });
   const benchSquad = squad.filter(name => !isPlayerOn(f, name))
     .sort((a,b) => playerMatchSeconds(f,a) - playerMatchSeconds(f,b));
   wrap.innerHTML = `<div class="attend-list">`
@@ -3841,9 +3947,11 @@ document.getElementById('timerEndBtn').onclick = () => {
   persistFixtures();
   stopTimerTick();
   document.getElementById('timerBackdrop').classList.remove('open');
+  const justEndedId = timerFixtureId;
   timerFixtureId = null;
   showToast(`Match ended — ${formatClock(nowSec)} logged. Don't forget to record the result.`, 6000);
   renderFixtures();
+  returnToFixtureCard(justEndedId);
 };
 
 // Aggregate tracked minutes across a team's finalised, timed matches — used
