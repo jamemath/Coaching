@@ -2973,6 +2973,7 @@ function renderFixtures(){
   const roster = fixtureRoster(activeFixtureTeam);
   wrap.innerHTML = list.map(f=>{
     const scorersList = Object.entries(f.scorers||{}).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`${escapeHtml(n)}${c>1?' ('+c+')':''}`).join(', ');
+    const hasResult = f.played || !!f.potm || !!scorersList || (f.scoreUs||0) > 0 || (f.scoreThem||0) > 0;
     const hasSquad = (f.squad||[]).length > 0;
     const hasTimerData = f.timer && f.timer.stints && f.timer.stints.length > 0;
     const duty = f.coachDuty || [];
@@ -2988,7 +2989,7 @@ function renderFixtures(){
       <div class="fixture-top">
         <span class="fixture-ha ${f.homeAway==='away'?'away':'home'}">${f.homeAway==='away'?'AWAY':'HOME'}</span>
         ${f.friendly ? '<span class="fixture-friendly">Friendly</span>' : ''}
-        ${f.played ? `<span class="fixture-score">${f.scoreUs}–${f.scoreThem}</span>` : ''}
+        ${hasResult ? `<span class="fixture-score">${f.scoreUs||0}–${f.scoreThem||0}</span>` : ''}
       </div>
       <div class="fixture-opp">${escapeHtml(f.opponent || 'Opponent TBC')}</div>
       <div class="fixture-meta">${f.date ? formatDate(f.date) : 'Date TBC'}${f.time ? ', '+escapeHtml(f.time) : ''}</div>
@@ -2997,7 +2998,7 @@ function renderFixtures(){
       <div class="fixture-meta"><b>Coaches:</b> ${duty.length ? escapeHtml(duty.join(' & '))+' on duty' : 'duty not set'}${teamCoachesForCard.length ? ' · '+cy+' yes · '+cn+' no' : ''}</div>
       ${roster.length ? `<div class="fixture-meta"><b>Availability:</b> ${ay} yes · ${an} no · ${at} tbc</div>` : ''}
       <div class="fixture-meta"><b>Squad:</b> ${hasSquad ? (f.squad||[]).length+' selected' : 'not set'}</div>
-      ${f.played ? `<div class="fixture-meta">${scorersList ? '<b>Scorers:</b> '+scorersList : ''}${f.potm ? ' · <b>POTW:</b> '+escapeHtml(f.potm) : ''}</div>` : ''}
+      ${hasResult ? `<div class="fixture-meta">${scorersList ? '<b>Scorers:</b> '+scorersList : ''}${f.potm ? ' · <b>POTW:</b> '+escapeHtml(f.potm) : ''}</div>` : ''}
       ${hasTimerData ? `<div class="fixture-meta">${f.timer.running ? '⏱ Timer running' : (f.timer.finalized ? '⏱ Playing time logged' : '⏱ Timer paused, not finalised')}</div>` : ''}
       ${f.notes ? `<div class="gc-notes">${escapeHtml(f.notes)}</div>` : ''}
       <div class="fixture-actions">
@@ -3006,7 +3007,7 @@ function renderFixtures(){
         <button class="btn-mini fx-avail" data-id="${f.id}">Availability</button>
         <button class="btn-mini fx-squad" data-id="${f.id}">Squad</button>
         <button class="btn-mini fx-timer" data-id="${f.id}" ${hasSquad ? '' : 'disabled style="opacity:.45;"'}>${hasTimerData ? 'Timer ▸' : 'Start Timer'}</button>
-        <button class="btn-mini fx-result" data-id="${f.id}">${f.played ? 'Edit Result' : 'Record Result'}</button>
+        <button class="btn-mini fx-result" data-id="${f.id}">${hasResult ? 'Edit Result' : 'Record Result'}</button>
         <button class="fx-del" data-id="${f.id}" title="Delete">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
         </button>
