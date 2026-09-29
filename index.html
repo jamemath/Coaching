@@ -331,15 +331,21 @@
   .save-session-btn{ width:100%; margin-top:20px; }
 
   .history-card{
-    background:#fff; border:1px solid var(--chalk-line); border-radius:14px; padding:12px 14px; margin-bottom:12px;
+    background:#fff; border:1px solid var(--chalk-line); border-radius:14px; padding:12px 14px; margin-bottom:10px;
   }
-  .history-card .hc-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .history-card .hc-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; cursor:pointer; }
   .history-card .hc-date{ font-family: var(--font-display); font-weight:700; font-size:14px; color: var(--pitch-dark); }
   .history-card .hc-date-sub{ font-size:11.5px; color: var(--ink-soft); margin-top:2px; }
+  .history-card .hc-totw{ font-size:12.5px; color: var(--ink-soft); margin-top:5px; }
+  .history-card .hc-totw b{ color: var(--pitch-mid); }
+  .history-card .hc-top-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
   .history-card .hc-del{ border:none; background:none; color: var(--red); cursor:pointer; padding:4px; flex-shrink:0; }
+  .history-card .hc-body{ margin-top:2px; }
   .history-card .hc-row{ font-size:13px; color: var(--ink-soft); margin-top:6px; line-height:1.5; }
   .history-card .hc-row b{ color: var(--ink); }
   .history-card .hc-notes{ margin-top:8px; font-size:13.5px; background: var(--chalk); border-radius:8px; padding:8px 10px; }
+  .card-chev{ width:14px; height:14px; color: var(--ink-soft); flex-shrink:0; transition: transform 0.15s; margin-top:2px; }
+  .card-chev.open{ transform: rotate(90deg); }
 
   .summary-table{ background:#fff; border:1px solid var(--chalk-line); border-top:none; border-radius:0 0 12px 12px; overflow:hidden; }
   .summary-row{ display:flex; align-items:center; justify-content:space-between; padding:10px 14px; border-bottom:1px solid var(--chalk-line); }
@@ -380,11 +386,13 @@
   .goal-stepper .g-count{ font-family: var(--font-display); font-weight:700; min-width:14px; text-align:center; font-size:14px; }
 
   .game-card{
-    background:#fff; border:1px solid var(--chalk-line); border-radius:14px; padding:12px 14px; margin-bottom:12px;
+    background:#fff; border:1px solid var(--chalk-line); border-radius:14px; padding:12px 14px; margin-bottom:10px;
   }
-  .game-card .gc-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .game-card .gc-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; cursor:pointer; }
   .game-card .gc-title{ font-family: var(--font-display); font-weight:700; font-size:14px; color: var(--pitch-dark); }
+  .game-card .gc-score-wrap{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
   .game-card .gc-score{ font-family: var(--font-display); font-weight:700; font-size:20px; color: var(--pitch-mid); flex-shrink:0; }
+  .game-card .gc-body{ margin-top:2px; }
   .game-card .gc-row{ font-size:13px; color: var(--ink-soft); margin-top:6px; line-height:1.5; }
   .game-card .gc-row b{ color: var(--ink); }
   .game-card .gc-notes{ margin-top:8px; font-size:13.5px; background: var(--chalk); border-radius:8px; padding:8px 10px; }
@@ -1309,6 +1317,8 @@ let activeGamesTeam = 'meerkats';
 let activeSessionTeam = 'meerkats';
 let activeHistoryTeam = 'meerkats';
 let activeSummaryTeam = 'meerkats';
+let expandedHistoryIds = new Set();
+let expandedGameIds = new Set();
 let predsCoaches = [];
 let editingFixtureId = null;
 let squadEditFixtureId = null;
@@ -2617,32 +2627,50 @@ function renderGamesList(){
     const scorersList = Object.entries(g.scorers||{}).sort((a,b)=>b[1]-a[1])
       .map(([name,n]) => `${escapeHtml(name)}${n>1?` (${n})`:''}`).join(', ');
     const squad = g.squad || [];
+    const isOpen = expandedGameIds.has(g.id);
     return `
       <div class="game-card" data-id="${g.id}">
         <div class="gc-top">
           <div class="gc-title">${formatDate(g.date)}${g.opponent ? ' vs '+escapeHtml(g.opponent) : ''}</div>
-          <div class="gc-score">${g.scoreUs}–${g.scoreThem}</div>
+          <div class="gc-score-wrap">
+            <div class="gc-score">${g.scoreUs}–${g.scoreThem}</div>
+            <svg class="card-chev${isOpen ? ' open' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg>
+          </div>
         </div>
-        <div class="gc-row"><b>Played:</b> ${squad.length} — ${escapeHtml(squad.join(', '))}</div>
-        <div class="gc-row"><b>Scorers:</b> ${scorersList || '—'}</div>
-        <div class="gc-row"><b>Player of the Week:</b> ${g.potm ? escapeHtml(g.potm) : '—'}</div>
-        ${g.notes ? `<div class="gc-notes">${escapeHtml(g.notes)}</div>` : ''}
-        <div class="gc-actions" style="margin-top:10px;">
-          <button class="gc-edit" data-id="${g.id}" title="Edit">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-          </button>
-          <button class="gc-del" data-id="${g.id}" title="Delete">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-          </button>
+        <div class="gc-body" style="display:${isOpen ? 'block' : 'none'};">
+          <div class="gc-row"><b>Played:</b> ${squad.length} — ${escapeHtml(squad.join(', '))}</div>
+          <div class="gc-row"><b>Scorers:</b> ${scorersList || '—'}</div>
+          <div class="gc-row"><b>Player of the Week:</b> ${g.potm ? escapeHtml(g.potm) : '—'}</div>
+          ${g.notes ? `<div class="gc-notes">${escapeHtml(g.notes)}</div>` : ''}
+          <div class="gc-actions" style="margin-top:10px;">
+            <button class="gc-edit" data-id="${g.id}" title="Edit">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+            <button class="gc-del" data-id="${g.id}" title="Delete">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            </button>
+          </div>
         </div>
       </div>
     `;
   }).join('');
+  wrap.querySelectorAll('.gc-top').forEach(top=>{
+    top.onclick = () => {
+      const card = top.closest('.game-card');
+      const id = card.dataset.id;
+      const body = card.querySelector('.gc-body');
+      const chev = card.querySelector('.card-chev');
+      const open = body.style.display === 'none';
+      body.style.display = open ? 'block' : 'none';
+      chev.classList.toggle('open', open);
+      if(open) expandedGameIds.add(id); else expandedGameIds.delete(id);
+    };
+  });
   wrap.querySelectorAll('.gc-edit').forEach(btn=>{
-    btn.onclick = () => openEditGame(btn.dataset.id);
+    btn.onclick = (e) => { e.stopPropagation(); openEditGame(btn.dataset.id); };
   });
   wrap.querySelectorAll('.gc-del').forEach(btn=>{
-    btn.onclick = () => confirmGameDelete(btn.dataset.id, btn.closest('.game-card'));
+    btn.onclick = (e) => { e.stopPropagation(); confirmGameDelete(btn.dataset.id, btn.closest('.game-card')); };
   });
 }
 
@@ -4096,27 +4124,46 @@ function renderHistory(){
     const drillNames = s.drillIds.map(id => { const d = drills.find(x=>x.id===id); return d ? d.name : null; }).filter(Boolean);
     const quick = (s.quickDrills || []);
     const allDrillText = drillNames.concat(quick.map(q => '⚡ ' + q.name + (q.notes ? ` (${q.notes})` : ''))).join(', ');
+    const isOpen = expandedHistoryIds.has(s.id);
     return `
       <div class="history-card" data-id="${s.id}">
         <div class="hc-top">
           <div>
             <div class="hc-date">${s.title ? escapeHtml(s.title) : formatDate(s.date)}</div>
             ${s.title ? `<div class="hc-date-sub">${formatDate(s.date)}</div>` : ''}
+            <div class="hc-totw">🏅 <b>${s.trainerOfWeek ? escapeHtml(s.trainerOfWeek) : 'Not set'}</b></div>
           </div>
-          <button class="hc-del" data-id="${s.id}" title="Delete">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-          </button>
+          <div class="hc-top-actions">
+            <button class="hc-del" data-id="${s.id}" title="Delete">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            </button>
+            <svg class="card-chev${isOpen ? ' open' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg>
+          </div>
         </div>
-        <div class="hc-row"><b>Lead coach:</b> ${s.leadCoach ? escapeHtml(s.leadCoach) : '—'}</div>
-        <div class="hc-row"><b>Drills:</b> ${allDrillText ? escapeHtml(allDrillText) : '—'}</div>
-        <div class="hc-row"><b>Attendance:</b> ${s.attendance.length} player${s.attendance.length===1?'':'s'}${s.attendance.length ? ' — '+escapeHtml(s.attendance.join(', ')) : ''}</div>
-        <div class="hc-row"><b>Trainer of the Week:</b> ${s.trainerOfWeek ? escapeHtml(s.trainerOfWeek) : '—'}</div>
-        ${s.notes ? `<div class="hc-notes">${escapeHtml(s.notes)}</div>` : ''}
+        <div class="hc-body" style="display:${isOpen ? 'block' : 'none'};">
+          <div class="hc-row"><b>Lead coach:</b> ${s.leadCoach ? escapeHtml(s.leadCoach) : '—'}</div>
+          <div class="hc-row"><b>Drills:</b> ${allDrillText ? escapeHtml(allDrillText) : '—'}</div>
+          <div class="hc-row"><b>Attendance:</b> ${s.attendance.length} player${s.attendance.length===1?'':'s'}${s.attendance.length ? ' — '+escapeHtml(s.attendance.join(', ')) : ''}</div>
+          ${s.notes ? `<div class="hc-notes">${escapeHtml(s.notes)}</div>` : ''}
+        </div>
       </div>
     `;
   }).join('');
+  wrap.querySelectorAll('.hc-top').forEach(top=>{
+    top.onclick = (e) => {
+      if(e.target.closest('.hc-del')) return;
+      const card = top.closest('.history-card');
+      const id = card.dataset.id;
+      const body = card.querySelector('.hc-body');
+      const chev = card.querySelector('.card-chev');
+      const open = body.style.display === 'none';
+      body.style.display = open ? 'block' : 'none';
+      chev.classList.toggle('open', open);
+      if(open) expandedHistoryIds.add(id); else expandedHistoryIds.delete(id);
+    };
+  });
   wrap.querySelectorAll('.hc-del').forEach(btn=>{
-    btn.onclick = () => confirmHistoryDelete(btn.dataset.id, btn.closest('.history-card'));
+    btn.onclick = (e) => { e.stopPropagation(); confirmHistoryDelete(btn.dataset.id, btn.closest('.history-card')); };
   });
 }
 
