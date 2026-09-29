@@ -464,6 +464,9 @@
   .fixture-opp{ font-weight:700; font-size:15.5px; margin-top:8px; color: var(--pitch-dark); }
   .fixture-meta{ font-size:12.5px; color: var(--ink-soft); margin-top:3px; line-height:1.4; }
   .fixture-meta b{ color: var(--ink); }
+  .fixture-header{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; cursor:pointer; }
+  .fixture-header-main{ flex:1; min-width:0; }
+  .fixture-body{ margin-top:2px; }
   .fixture-actions{ display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
   .fixture-actions .btn-mini{ flex:1; min-width:80px; text-align:center; }
   .fixture-actions .fx-del{
@@ -1319,6 +1322,7 @@ let activeHistoryTeam = 'meerkats';
 let activeSummaryTeam = 'meerkats';
 let expandedHistoryIds = new Set();
 let expandedGameIds = new Set();
+let expandedFixtureIds = new Set();
 let predsCoaches = [];
 let editingFixtureId = null;
 let squadEditFixtureId = null;
@@ -3121,44 +3125,64 @@ function renderFixtures(){
     const avail = f.availability || {};
     let ay=0, an=0, at=0;
     roster.forEach(p=>{ const s = avail[p] || 'tbc'; if(s==='yes') ay++; else if(s==='no') an++; else at++; });
+    const isOpen = expandedFixtureIds.has(f.id);
     return `
     <div class="fixture-card" data-id="${f.id}">
-      <div class="fixture-top">
-        <span class="fixture-ha ${f.homeAway==='away'?'away':'home'}">${f.homeAway==='away'?'AWAY':'HOME'}</span>
-        ${f.friendly ? '<span class="fixture-friendly">Friendly</span>' : ''}
-        ${hasResult ? `<span class="fixture-score">${f.scoreUs||0}–${f.scoreThem||0}</span>` : ''}
+      <div class="fixture-header">
+        <div class="fixture-header-main">
+          <div class="fixture-top">
+            <span class="fixture-ha ${f.homeAway==='away'?'away':'home'}">${f.homeAway==='away'?'AWAY':'HOME'}</span>
+            ${f.friendly ? '<span class="fixture-friendly">Friendly</span>' : ''}
+            ${hasResult ? `<span class="fixture-score">${f.scoreUs||0}–${f.scoreThem||0}</span>` : ''}
+          </div>
+          <div class="fixture-opp">${escapeHtml(f.opponent || 'Opponent TBC')}</div>
+          <div class="fixture-meta">${f.date ? formatDate(f.date) : 'Date TBC'}${f.time ? ', '+escapeHtml(f.time) : ''}</div>
+        </div>
+        <svg class="card-chev${isOpen ? ' open' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg>
       </div>
-      <div class="fixture-opp">${escapeHtml(f.opponent || 'Opponent TBC')}</div>
-      <div class="fixture-meta">${f.date ? formatDate(f.date) : 'Date TBC'}${f.time ? ', '+escapeHtml(f.time) : ''}</div>
-      ${f.venue ? `<div class="fixture-meta">${escapeHtml(f.venue)}</div>` : ''}
-      ${f.competition ? `<div class="fixture-meta">${escapeHtml(f.competition)}</div>` : ''}
-      <div class="fixture-meta"><b>Coaches:</b> ${duty.length ? escapeHtml(duty.join(' & '))+' on duty' : 'duty not set'}${teamCoachesForCard.length ? ' · '+cy+' yes · '+cn+' no' : ''}</div>
-      ${roster.length ? `<div class="fixture-meta"><b>Availability:</b> ${ay} yes · ${an} no · ${at} tbc</div>` : ''}
-      <div class="fixture-meta"><b>Squad:</b> ${hasSquad ? (f.squad||[]).length+' selected' : 'not set'}</div>
-      ${hasResult ? `<div class="fixture-meta">${scorersList ? '<b>Scorers:</b> '+scorersList : ''}${f.potm ? ' · <b>POTW:</b> '+escapeHtml(f.potm) : ''}</div>` : ''}
-      ${hasTimerData ? `<div class="fixture-meta">${f.timer.running ? '⏱ Timer running' : (f.timer.finalized ? '⏱ Playing time logged' : '⏱ Timer paused, not finalised')}</div>` : ''}
-      ${f.notes ? `<div class="gc-notes">${escapeHtml(f.notes)}</div>` : ''}
-      <div class="fixture-actions">
-        <button class="btn-mini fx-setup" data-id="${f.id}">Setup</button>
-        <button class="btn-mini fx-duty" data-id="${f.id}">Coaches</button>
-        <button class="btn-mini fx-avail" data-id="${f.id}">Availability</button>
-        <button class="btn-mini fx-squad" data-id="${f.id}">Squad</button>
-        <button class="btn-mini fx-timer" data-id="${f.id}" ${hasSquad ? '' : 'disabled style="opacity:.45;"'}>${hasTimerData ? 'Timer ▸' : 'Start Timer'}</button>
-        <button class="btn-mini fx-result" data-id="${f.id}">${hasResult ? 'Edit Result' : 'Record Result'}</button>
-        <button class="fx-del" data-id="${f.id}" title="Delete">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-        </button>
+      <div class="fixture-body" style="display:${isOpen ? 'block' : 'none'};">
+        ${f.venue ? `<div class="fixture-meta">${escapeHtml(f.venue)}</div>` : ''}
+        ${f.competition ? `<div class="fixture-meta">${escapeHtml(f.competition)}</div>` : ''}
+        <div class="fixture-meta"><b>Coaches:</b> ${duty.length ? escapeHtml(duty.join(' & '))+' on duty' : 'duty not set'}${teamCoachesForCard.length ? ' · '+cy+' yes · '+cn+' no' : ''}</div>
+        ${roster.length ? `<div class="fixture-meta"><b>Availability:</b> ${ay} yes · ${an} no · ${at} tbc</div>` : ''}
+        <div class="fixture-meta"><b>Squad:</b> ${hasSquad ? (f.squad||[]).length+' selected' : 'not set'}</div>
+        ${hasResult ? `<div class="fixture-meta">${scorersList ? '<b>Scorers:</b> '+scorersList : ''}${f.potm ? ' · <b>POTW:</b> '+escapeHtml(f.potm) : ''}</div>` : ''}
+        ${hasTimerData ? `<div class="fixture-meta">${f.timer.running ? '⏱ Timer running' : (f.timer.finalized ? '⏱ Playing time logged' : '⏱ Timer paused, not finalised')}</div>` : ''}
+        ${f.notes ? `<div class="gc-notes">${escapeHtml(f.notes)}</div>` : ''}
+        <div class="fixture-actions">
+          <button class="btn-mini fx-setup" data-id="${f.id}">Setup</button>
+          <button class="btn-mini fx-duty" data-id="${f.id}">Coaches</button>
+          <button class="btn-mini fx-avail" data-id="${f.id}">Availability</button>
+          <button class="btn-mini fx-squad" data-id="${f.id}">Squad</button>
+          <button class="btn-mini fx-timer" data-id="${f.id}" ${hasSquad ? '' : 'disabled style="opacity:.45;"'}>${hasTimerData ? 'Timer ▸' : 'Start Timer'}</button>
+          <button class="btn-mini fx-result" data-id="${f.id}">${hasResult ? 'Edit Result' : 'Record Result'}</button>
+          <button class="fx-del" data-id="${f.id}" title="Delete">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
+        </div>
       </div>
     </div>`;
   }).join('');
 
-  wrap.querySelectorAll('.fx-setup').forEach(b=> b.onclick = () => openFixtureSetup(b.dataset.id));
-  wrap.querySelectorAll('.fx-duty').forEach(b=> b.onclick = () => openFixtureDuty(b.dataset.id));
-  wrap.querySelectorAll('.fx-avail').forEach(b=> b.onclick = () => openFixtureAvailability(b.dataset.id));
-  wrap.querySelectorAll('.fx-squad').forEach(b=> b.onclick = () => openFixtureSquad(b.dataset.id));
-  wrap.querySelectorAll('.fx-timer').forEach(b=> b.onclick = () => { if(!b.disabled) openTimerSheet(b.dataset.id); });
-  wrap.querySelectorAll('.fx-result').forEach(b=> b.onclick = () => openFixtureResult(b.dataset.id));
-  wrap.querySelectorAll('.fx-del').forEach(b=> b.onclick = () => deleteFixture(b.dataset.id));
+  wrap.querySelectorAll('.fixture-header').forEach(hdr=>{
+    hdr.onclick = () => {
+      const card = hdr.closest('.fixture-card');
+      const id = card.dataset.id;
+      const body = card.querySelector('.fixture-body');
+      const chev = card.querySelector('.card-chev');
+      const open = body.style.display === 'none';
+      body.style.display = open ? 'block' : 'none';
+      chev.classList.toggle('open', open);
+      if(open) expandedFixtureIds.add(id); else expandedFixtureIds.delete(id);
+    };
+  });
+  wrap.querySelectorAll('.fx-setup').forEach(b=> b.onclick = (e) => { e.stopPropagation(); openFixtureSetup(b.dataset.id); });
+  wrap.querySelectorAll('.fx-duty').forEach(b=> b.onclick = (e) => { e.stopPropagation(); openFixtureDuty(b.dataset.id); });
+  wrap.querySelectorAll('.fx-avail').forEach(b=> b.onclick = (e) => { e.stopPropagation(); openFixtureAvailability(b.dataset.id); });
+  wrap.querySelectorAll('.fx-squad').forEach(b=> b.onclick = (e) => { e.stopPropagation(); openFixtureSquad(b.dataset.id); });
+  wrap.querySelectorAll('.fx-timer').forEach(b=> b.onclick = (e) => { e.stopPropagation(); if(!b.disabled) openTimerSheet(b.dataset.id); });
+  wrap.querySelectorAll('.fx-result').forEach(b=> b.onclick = (e) => { e.stopPropagation(); openFixtureResult(b.dataset.id); });
+  wrap.querySelectorAll('.fx-del').forEach(b=> b.onclick = (e) => { e.stopPropagation(); deleteFixture(b.dataset.id); });
 }
 
 // -- Fixture setup sheet --
