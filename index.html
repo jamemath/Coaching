@@ -595,6 +595,24 @@
   }
   .pitch-bench-blobs{ display:flex; flex-wrap:wrap; gap:8px; }
   .pitch-blob.bench{ width:42px; height:42px; font-size:9.5px; background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.35); box-shadow:none; }
+
+  /* Headlines banner */
+  .tk{ margin:10px -16px -12px; overflow:hidden; background:rgba(0,0,0,0.28); }
+  .tk-track{ display:flex; width:max-content; animation: tk-scroll linear infinite; }
+  .tk:active .tk-track{ animation-play-state:paused; }
+  .tk-half{ display:flex; flex-shrink:0; align-items:center; }
+  .tk-item{ white-space:nowrap; padding:8px 0 8px 18px; font-size:13px; display:flex; align-items:center; gap:7px; color:#fff; }
+  .tk-item::after{ content:""; width:4px; height:4px; border-radius:50%; background:#fff; opacity:0.35; margin-left:12px; }
+  .tk-tag{ font-size:10px; font-weight:700; letter-spacing:0.6px; padding:2px 6px; border-radius:3px; background:rgba(255,255,255,0.9); color: var(--pitch-dark); }
+  .tk-tag.next{ background: var(--gold); }
+  .tk-team{ opacity:0.75; font-size:11px; text-transform:uppercase; letter-spacing:0.4px; }
+  .tk-w{ color: var(--gold); font-weight:700; }
+  @keyframes tk-scroll{ from{ transform: translateX(0); } to{ transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce){
+    .tk{ overflow-x:auto; }
+    .tk-track{ animation:none; }
+    .tk-half + .tk-half{ display:none; }
+  }
 </style>
 </head>
 <body>
@@ -621,6 +639,7 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
     </button>
   </div>
+  <div class="tk" id="ticker" style="display:none" role="region" aria-label="Latest and upcoming games"></div>
 </header>
 
 <section id="tab-drills" class="tab-panel">
@@ -964,6 +983,21 @@ James	1	1	1	1"></textarea>
 </div>
 
 <!-- Fixture Setup sheet -->
+<div class="sheet-backdrop" id="summaryBackdrop">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h2>Parent summary</h2>
+    <div class="field">
+      <textarea id="summaryText" style="min-height:170px; font-family: var(--font-body); font-size:15px;"></textarea>
+      <div class="hint">Edit if you like, then copy and paste into Spond. Coach notes are never included.</div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" id="summaryClose">Close</button>
+      <button class="btn btn-primary" id="summaryCopy">Copy</button>
+    </div>
+  </div>
+</div>
+
 <div class="sheet-backdrop" id="fixtureBackdrop">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -2305,6 +2339,122 @@ document.getElementById('editAllSave').onclick = () => {
   render();
 };
 
+// ---- Headlines banner and parent summary ----
+const TK_STOP = { fc:1, jfc:1, afc:1, u11:1, u12:1, u13:1, u14:1, u15:1, u16:1, junior:1, juniors:1, youth:1, football:1, foot:1, community:1, girls:1, boys:1, the:1 };
+function tkToks(n){ return String(n||'').toLowerCase().replace(/[^a-z0-9 ]/g,'').split(/\s+/).filter(t=>t && !TK_STOP[t]); }
+function tkTokEq(a,b){ return a===b || (a.length>=5 && b.length>=5 && a.slice(0,5)===b.slice(0,5)); }
+function tkSame(a,b){
+  const A = tkToks(a), B = tkToks(b);
+  if(!A.length || !B.length) return false;
+  let m = 0;
+  A.forEach(t=>{ if(B.some(u=>tkTokEq(t,u))) m++; });
+  return m/A.length >= 0.75 && m/B.length >= 0.6;
+}
+function tkOrd(n){ const s=['th','st','nd','rd'], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); }
+function tkResult(f){ return f.scoreUs>f.scoreThem ? 'W' : f.scoreUs<f.scoreThem ? 'L' : 'D'; }
+function tkLocalToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function tkDate(iso){ const d=new Date(iso+'T00:00:00'); return isNaN(d) ? iso : d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}); }
+const TK_TEAM_NAMES = { preds:'Predators', meerkats:'Meerkats' };
+
+// Pure: turns fixtures + league tables into headline objects. Same-name opponents are matched loosely
+// because fixture names and league names are often spelled differently.
+function tickerItems(fx, lg, today){
+  const next = [], overdue = [], done = [];
+  ['preds','meerkats'].forEach(team=>{
+    const list = (fx[team]||[]);
+    const table = (lg[team]||[]).slice().sort((a,b)=> b.pts - a.pts);
+    const played = list.filter(f=>f.played).sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    const pos = opp => { for(let i=0;i<table.length;i++) if(tkSame(table[i].name, opp)) return i+1; return 0; };
+    const meet = arr => arr.length ? tkResult(arr[0])+' '+arr[0].scoreUs+'–'+arr[0].scoreThem : null;
+    const tail = (f, prev) => {
+      const out = [];
+      if(f.friendly){ out.push('friendly, not in the table'); if(prev) out.push('last met: '+prev); return out.join(' · '); }
+      const p = pos(f.opponent);
+      if(p) out.push(tkOrd(p)+' of '+table.length+' in the table');
+      out.push(prev ? 'last met: '+prev : 'first meeting');
+      return out.join(' · ');
+    };
+    const ha = f => f.homeAway==='away' ? 'A' : 'H';
+    const real = list.filter(f=>!f.played && f.opponent && !/^tbc$/i.test(String(f.opponent).trim()) && f.date);
+    real.filter(f=>f.date>=today).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,1).forEach(f=>{
+      const prev = meet(played.filter(x=>tkSame(x.opponent,f.opponent)));
+      next.push({ date:f.date, tag:'NEXT', next:true, team, text: tkDate(f.date)+' · '+f.opponent+' ('+ha(f)+') · '+tail(f,prev) });
+    });
+    real.filter(f=>f.date<today).sort((a,b)=>a.date.localeCompare(b.date)).forEach(f=>{
+      overdue.push({ date:f.date, tag:'?', team, text: tkDate(f.date)+' · '+f.opponent+' ('+ha(f)+') · result not entered yet' });
+    });
+    played.slice(0,2).forEach(f=>{
+      const prev = meet(played.filter(x=>x.id!==f.id && x.date<f.date && tkSame(x.opponent,f.opponent)));
+      done.push({ date:f.date, tag:'FT', team, score: (TK_TEAM_NAMES[team])+' '+(f.scoreUs||0)+'–'+(f.scoreThem||0), text: ' '+f.opponent+' ('+ha(f)+') · '+tail(f,prev) });
+    });
+  });
+  next.sort((a,b)=>a.date.localeCompare(b.date));
+  overdue.sort((a,b)=>a.date.localeCompare(b.date));
+  done.sort((a,b)=>b.date.localeCompare(a.date));
+  return next.concat(overdue, done);
+}
+
+let tickerSig = '';
+function renderTicker(){
+  const el = document.getElementById('ticker');
+  if(!el) return;
+  const show = (activeTab==='games' || activeTab==='league' || activeTab==='fixtures');
+  const items = tickerItems(fixtures, leagueTables, tkLocalToday());
+  if(!show || !items.length){ el.style.display = 'none'; return; }
+  const sig = JSON.stringify(items);
+  el.style.display = 'block';
+  if(sig !== tickerSig){
+    const half = items.map(it =>
+      '<span class="tk-item"><b class="tk-tag'+(it.next?' next':'')+'">'+it.tag+'</b><span class="tk-team">'+escapeHtml(TK_TEAM_NAMES[it.team])+'</span>'+
+      '<span>'+(it.score ? '<span class="tk-w">'+escapeHtml(it.score)+'</span>' : '')+escapeHtml(it.text)+'</span></span>'
+    ).join('');
+    el.innerHTML = '<div class="tk-track"><div class="tk-half">'+half+'</div><div class="tk-half" aria-hidden="true">'+half+'</div></div>';
+    tickerSig = sig;
+  }
+  const tr = el.querySelector('.tk-track'), hf = el.querySelector('.tk-half');
+  if(tr && hf) tr.style.animationDuration = Math.max(25, Math.round(hf.scrollWidth/55))+'s';
+}
+
+function tkShortName(n){
+  const p = String(n||'').trim().split(/\s+/);
+  return p.length > 1 ? p[0]+' '+p[p.length-1][0]+'.' : p[0];
+}
+function tkSent(x){ return /\.$/.test(x) ? x+' ' : x+'. '; }
+function parentSummaryText(f, team){
+  const name = TK_TEAM_NAMES[team];
+  const r = tkResult(f);
+  const verb = r==='W' ? 'won' : r==='L' ? 'lost' : 'drew';
+  const where = f.homeAway==='away' ? 'away at' : 'at home to';
+  let t = name+' '+verb+' '+(f.scoreUs||0)+'-'+(f.scoreThem||0)+' '+where+' '+(f.opponent||'the opposition')+(f.friendly ? ' in a friendly' : '')+'. ';
+  const sc = Object.entries(f.scorers||{}).sort((a,b)=>b[1]-a[1]).map(([n,c])=>tkShortName(n)+(c>1 ? ' ('+c+')' : ''));
+  if(sc.length) t += tkSent('Goals from '+sc.join(', '));
+  if(f.potm) t += tkSent('Player of the match: '+tkShortName(f.potm));
+  t += 'Thanks to everyone who came out to support the team.';
+  return t;
+}
+function openParentSummary(id){
+  const f = (fixtures[activeFixtureTeam]||[]).find(x=>x.id===id);
+  if(!f) return;
+  document.getElementById('summaryText').value = parentSummaryText(f, activeFixtureTeam);
+  document.getElementById('summaryBackdrop').classList.add('open');
+}
+document.getElementById('summaryClose').onclick = () => document.getElementById('summaryBackdrop').classList.remove('open');
+document.getElementById('summaryBackdrop').onclick = (e) => { if(e.target===document.getElementById('summaryBackdrop')) document.getElementById('summaryBackdrop').classList.remove('open'); };
+document.getElementById('summaryCopy').onclick = () => {
+  const ta = document.getElementById('summaryText');
+  const fallback = () => {
+    ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length);
+    let ok = false;
+    try{ ok = document.execCommand('copy'); }catch(e){}
+    showToast(ok ? 'Summary copied' : 'Text selected, press copy');
+  };
+  try{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(ta.value).then(()=>showToast('Summary copied'), fallback);
+    } else { fallback(); }
+  }catch(e){ fallback(); }
+};
+
 // ---- Tabs ----
 const TAB_TITLES = { drills:'Drill Library', session:"This Week's Session", games:'Match Games', history:'Session History', summary:'Squad Summary', documents:'Season Documents', league:'League Table', fixtures:'Fixtures' };
 function switchTab(tab){
@@ -2324,6 +2474,7 @@ function switchTab(tab){
   if(tab==='league') renderLeague();
   if(tab==='fixtures') renderFixtures();
   updateCountPill();
+  renderTicker();
 }
 document.querySelectorAll('#tabbar button').forEach(b=>{
   b.onclick = () => switchTab(b.dataset.tab);
@@ -2573,6 +2724,7 @@ document.querySelectorAll('#gamesSeg button').forEach(b=>{
 });
 
 function renderGamesPanel(){
+  renderTicker();
   document.querySelectorAll('#gamesSeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===activeGamesTeam));
   const dateInput = document.getElementById('gameDate');
   if(!dateInput.value) dateInput.value = todayISO();
@@ -2888,6 +3040,7 @@ document.getElementById('docSave').onclick = () => {
 
 // ---- League ----
 function renderLeague(){
+  renderTicker();
   document.querySelectorAll('#leagueSeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===activeLeagueTeam));
   const wrap = document.getElementById('leagueTableWrap');
   const rows = (leagueTables[activeLeagueTeam] || []).slice();
@@ -3194,6 +3347,7 @@ function defaultCompetition(team){
 }
 
 function renderFixtures(){
+  renderTicker();
   document.querySelectorAll('#fixtureSeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===activeFixtureTeam));
   const wrap = document.getElementById('fixturesList');
   const list = (fixtures[activeFixtureTeam]||[]).slice().sort((a,b)=> (a.date||'').localeCompare(b.date||''));
@@ -3248,6 +3402,7 @@ function renderFixtures(){
           <button class="btn-mini fx-squad" data-id="${f.id}">Squad</button>
           <button class="btn-mini fx-timer" data-id="${f.id}" ${hasSquad ? '' : 'disabled style="opacity:.45;"'}>${hasTimerData ? 'Timer ▸' : 'Start Timer'}</button>
           <button class="btn-mini fx-result" data-id="${f.id}">${hasResult ? 'Edit Result' : 'Record Result'}</button>
+          ${hasResult ? `<button class="btn-mini fx-summary" data-id="${f.id}">Summary</button>` : ''}
           <button class="fx-del" data-id="${f.id}" title="Delete">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
           </button>
@@ -3274,6 +3429,7 @@ function renderFixtures(){
   wrap.querySelectorAll('.fx-squad').forEach(b=> b.onclick = (e) => { e.stopPropagation(); openFixtureSquad(b.dataset.id); });
   wrap.querySelectorAll('.fx-timer').forEach(b=> b.onclick = (e) => { e.stopPropagation(); if(!b.disabled) openTimerSheet(b.dataset.id); });
   wrap.querySelectorAll('.fx-result').forEach(b=> b.onclick = (e) => { e.stopPropagation(); openFixtureResult(b.dataset.id); });
+  wrap.querySelectorAll('.fx-summary').forEach(b=> b.onclick = (e) => { e.stopPropagation(); openParentSummary(b.dataset.id); });
   wrap.querySelectorAll('.fx-del').forEach(b=> b.onclick = (e) => { e.stopPropagation(); deleteFixture(b.dataset.id); });
 }
 
