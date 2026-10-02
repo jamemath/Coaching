@@ -1521,6 +1521,95 @@ function initGoogleAuth(){
   }
 }
 
+
+// ---- Auto fixture feed (Full-Time emails -> "Fixture Feed" tab, written by an Apps Script in the sheet) ----
+const FEED_TAB = 'Fixture Feed';
+async function sheetsPullFeed(){
+  if(!accessToken) return null;
+  try{
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent("'"+FEED_TAB+"'")}!A2:M`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if(!res.ok) return null;          // tab missing / no access: silently skip, never block normal sync
+    const data = await res.json();
+    return (data.values || []).map(r => ({
+      fixtureId:r[0]||'', team:r[1]||'', opponent:r[2]||'', homeAway:r[3]||'home', competition:r[4]||'',
+      date:r[5]||'', time:r[6]||'', venue:r[7]||'', status:r[8]||'Normal', prevDate:r[9]||'', prevTime:r[10]||'',
+      changedAt:r[11]||'', flag:r[12]||''
+    }));
+  }catch(e){ return null; }
+}
+function feedBlank(s){ const n = feedNorm(s); return !n || n==='tbc' || n==='opponenttbc'; }
+const FEED_GENERIC = new Set(['afc','jfc','fc','youth','united','utd','junior','juniors','football','club','girls','boys','the','and','sunday','saturday']);
+function feedTokens(s){
+  return String(s||'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(t=>t.length>=3 && !FEED_GENERIC.has(t) && !/^u\d+$/.test(t));
+}
+function feedSimilar(a, b){
+  const na = feedNorm(a), nb = feedNorm(b);
+  if(!na || !nb) return false;
+  if(na===nb || na.includes(nb) || nb.includes(na)) return true;
+  const ta = feedTokens(a), tb = new Set(feedTokens(b));
+  return ta.length>0 && tb.size>0 && ta[0] && tb.has(ta[0]);
+}
+function feedNorm(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+function mergeFixtureFeed(rows){
+  if(!rows || !rows.length) return 0;
+  let changes = 0;
+  rows.forEach(r=>{
+    if(r.flag || !r.date || (r.team!=='preds' && r.team!=='meerkats')) return;   // flagged rows are never applied
+    const list = fixtures[r.team];
+    let f = list.find(x=>x.ftId === r.fixtureId);
+    // Same date, and the opponent is blank/TBC or looks like the same club -> same fixture
+    if(!f){
+      const sameDay = list.filter(x=>x.date===r.date && !x.ftId);
+      f = sameDay.find(x=>feedBlank(x.opponent) || feedSimilar(x.opponent, r.opponent)) || null;
+    }
+    // Date was moved: match on the previous date + similar opponent
+    if(!f && r.prevDate){
+      f = list.find(x=>x.date===r.prevDate && !x.ftId && (feedBlank(x.opponent) || feedSimilar(x.opponent, r.opponent))) || null;
+    }
+    // Last resort: exactly one unplayed, un-linked fixture against a similar opponent
+    if(!f){
+      const todayISO = new Date().toISOString().slice(0,10);
+      const cands = list.filter(x=>!x.played && !x.ftId && (x.date||'') >= todayISO && !feedBlank(x.opponent) && feedSimilar(x.opponent, r.opponent));
+      if(cands.length === 1) f = cands[0];
+    }
+    if(!f){
+      list.push({
+        id: 'fx-ft-'+r.fixtureId, ftId: r.fixtureId, opponent: r.opponent, date: r.date, time: r.time, venue: r.venue,
+        homeAway: r.homeAway, competition: r.competition || defaultCompetition(r.team), friendly:false,
+        matchLengthMins:0, playersPerSide:0, squad:[], played:false, scoreUs:0, scoreThem:0, scorers:{}, potm:'', notes:'',
+        leagueApplied:false, coachDuty:[], coachAvailability:{}, availability:{},
+        ftStatus: /normal/i.test(r.status) ? '' : r.status, ftChange: { at: r.changedAt || new Date().toISOString(), added:true }
+      });
+      changes++; return;
+    }
+    if(f.played) { if(!f.ftId){ f.ftId = r.fixtureId; changes++; } return; }   // never rewrite a completed match
+    const before = JSON.stringify([f.ftId,f.opponent,f.date,f.time,f.venue,f.homeAway,f.ftStatus||'']);
+    const oldDate = f.date, oldTime = f.time;
+    f.ftId = r.fixtureId;
+    if(feedBlank(f.opponent)) f.opponent = r.opponent;
+    f.date = r.date; f.time = r.time;
+    if(r.venue) f.venue = r.venue;
+    f.homeAway = r.homeAway;
+    if(!f.competition && r.competition) f.competition = r.competition;
+    f.ftStatus = /normal/i.test(r.status) ? '' : r.status;
+    const after = JSON.stringify([f.ftId,f.opponent,f.date,f.time,f.venue,f.homeAway,f.ftStatus||'']);
+    if(before !== after){
+      if(oldDate !== f.date || (oldTime && oldTime !== f.time)){ f.ftChange = { at: r.changedAt || new Date().toISOString(), prevDate: oldDate, prevTime: oldTime }; }
+      changes++;
+    }
+  });
+  if(changes){ persistFixtures(); }
+  return changes;
+}
+async function applyFixtureFeed(){
+  const rows = await sheetsPullFeed();
+  const n = mergeFixtureFeed(rows);
+  if(n){ showToast(n + ' fixture update' + (n>1?'s':'') + ' from Full-Time', 5000); }
+  return n;
+}
+
 async function afterSignIn(){
   await flushPending();
   const remote = await sheetsPullAll();
@@ -1537,6 +1626,7 @@ async function afterSignIn(){
   loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs(); loadLeague(); loadFixtures(); loadPredsPlayers(); loadPredsCoaches();
   migrateLegacyGames();
   seedPredsFixturesIfEmpty();
+  await applyFixtureFeed();
   render();
 }
 
@@ -3137,6 +3227,8 @@ function renderFixtures(){
           </div>
           <div class="fixture-opp">${escapeHtml(f.opponent || 'Opponent TBC')}</div>
           <div class="fixture-meta">${f.date ? formatDate(f.date) : 'Date TBC'}${f.time ? ', '+escapeHtml(f.time) : ''}</div>
+          ${f.ftStatus ? `<div class="fixture-meta" style="color:#b3261e;font-weight:700;">${escapeHtml(f.ftStatus.toUpperCase())} (per Full-Time)</div>` : ''}
+          ${(f.ftChange && !f.played && f.ftChange.at && (Date.now()-new Date(f.ftChange.at).getTime()) < 14*86400000) ? `<div class="fixture-meta" style="color:#b26a00;font-weight:700;">${f.ftChange.added ? 'New from Full-Time' : 'Changed'}${f.ftChange.prevDate ? ' (was '+formatDateShort(f.ftChange.prevDate)+(f.ftChange.prevTime?' '+escapeHtml(f.ftChange.prevTime):'')+')' : ''}</div>` : ''}
         </div>
         <svg class="card-chev${isOpen ? ' open' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 6 15 12 9 18"/></svg>
       </div>
