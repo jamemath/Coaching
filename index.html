@@ -1586,6 +1586,15 @@ function feedSimilar(a, b){
   return ta.length>0 && tb.size>0 && ta[0] && tb.has(ta[0]);
 }
 function feedNorm(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+// Compare kick-off times as times, so "9:30", "09:30" and "9:30 am" count as the same.
+function normFtTime(t){
+  const m = String(t||'').toLowerCase().match(/(\d{1,2})[:.](\d{2})\s*(am|pm)?/);
+  if(!m) return String(t||'').trim().toLowerCase();
+  let h = +m[1];
+  if(m[3]==='pm' && h<12) h += 12;
+  if(m[3]==='am' && h===12) h = 0;
+  return h+':'+m[2];
+}
 function mergeFixtureFeed(rows){
   if(!rows || !rows.length) return 0;
   let changes = 0;
@@ -1630,8 +1639,12 @@ function mergeFixtureFeed(rows){
     f.ftStatus = /normal/i.test(r.status) ? '' : r.status;
     const after = JSON.stringify([f.ftId,f.opponent,f.date,f.time,f.venue,f.homeAway,f.ftStatus||'']);
     if(before !== after){
-      if(oldDate !== f.date || (oldTime && oldTime !== f.time)){ f.ftChange = { at: r.changedAt || new Date().toISOString(), prevDate: oldDate, prevTime: oldTime }; }
+      if(oldDate !== f.date || (oldTime && normFtTime(oldTime) !== normFtTime(f.time))){ f.ftChange = { at: r.changedAt || new Date().toISOString(), prevDate: oldDate, prevTime: oldTime }; }
       changes++;
+    }
+    // Clear a "Changed" flag that only came from the time being written differently (9:30 v 09:30)
+    if(f.ftChange && !f.ftChange.added && f.ftChange.prevDate && f.ftChange.prevDate === f.date && normFtTime(f.ftChange.prevTime) === normFtTime(f.time)){
+      delete f.ftChange; changes++;
     }
   });
   if(changes){ persistFixtures(); }
