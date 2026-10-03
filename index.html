@@ -1689,7 +1689,7 @@ function invalidateToken(){
 async function sheetsPullAll(){
   if(!accessToken) return null;
   try{
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A2:B`, {
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A2:K`, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
     if(!res.ok){
@@ -1705,16 +1705,45 @@ async function sheetsPullAll(){
     rowMap = {};
     rows.forEach((row, i) => {
       const key = row[0];
-      const value = row[1];
+      // Values bigger than one cell are stored across columns B, C, D... — join them back
+      const value = row.length > 1 ? row.slice(1).join('') : undefined;
       if(key){ result[key] = value; rowMap[key] = i + 2; }
     });
     return result;
   }catch(e){ showToast('Sync read failed: ' + e.message, 6000); return null; }
 }
 
+// Google Sheets allows max 50,000 chars per cell, so big values are split across
+// columns B..K of the same row (up to ~450k chars). Short values still use B only.
+const CELL_CHUNK = 45000;
+const MAX_CHUNKS = 10;
+function chunkValue(value){
+  const s = String(value);
+  const out = [];
+  let i = 0;
+  while(i < s.length){
+    let end = Math.min(i + CELL_CHUNK, s.length);
+    // never split a surrogate pair across two cells
+    if(end < s.length){
+      const c = s.charCodeAt(end - 1);
+      if(c >= 0xD800 && c <= 0xDBFF) end--;
+    }
+    out.push(s.slice(i, end));
+    i = end;
+  }
+  if(out.length === 0) out.push('');
+  return out;
+}
+
 async function pushKey(key, value){
   markPending(key);
   if(!sheetsConfigured() || !accessToken){ return; }
+  const chunks = chunkValue(value);
+  if(chunks.length > MAX_CHUNKS){
+    showToast('Sync write failed: ' + key.replace('coachlog_','') + ' data is too large for the Sheet', 6000);
+    setSyncStatus('error');
+    return;
+  }
   setSyncStatus('pending');
   try{
     if(!rowMap[key]){
@@ -1725,16 +1754,19 @@ async function pushKey(key, value){
     let res;
     if(rowMap[key]){
       const row = rowMap[key];
-      res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!B${row}?valueInputOption=RAW`, {
+      // pad to full width so leftover chunks from a previously larger value get cleared
+      const cells = chunks.slice();
+      while(cells.length < MAX_CHUNKS) cells.push('');
+      res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!B${row}:K${row}?valueInputOption=RAW`, {
         method:'PUT',
         headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
-        body: JSON.stringify({ values: [[value]] })
+        body: JSON.stringify({ values: [cells] })
       });
     } else {
-      res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A:B:append?valueInputOption=RAW`, {
+      res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${SHEET_TAB}!A:K:append?valueInputOption=RAW`, {
         method:'POST',
         headers:{ Authorization:`Bearer ${accessToken}`, 'Content-Type':'application/json' },
-        body: JSON.stringify({ values: [[key, value]] })
+        body: JSON.stringify({ values: [[key, ...chunks]] })
       });
     }
     if(!res.ok){
