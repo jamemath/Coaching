@@ -1657,6 +1657,65 @@ async function applyFixtureFeed(){
   return n;
 }
 
+// ---- Match reports ("Match Reports" tab -> notes on the matching fixture; read-only, cached locally, not part of sync) ----
+const REPORTS_TAB = 'Match Reports';
+const REPORTS_CACHE_KEY = 'coachlog_match_reports_cache';
+let matchReports = [];
+function loadMatchReportsCache(){
+  try{ const v = JSON.parse(localStorage.getItem(REPORTS_CACHE_KEY) || '[]'); matchReports = Array.isArray(v) ? v : []; }catch(e){ matchReports = []; }
+}
+function reportTeamKey(t){
+  const n = String(t||'').toLowerCase();
+  if(n.includes('pred')) return 'preds';
+  if(n.includes('meerkat')) return 'meerkats';
+  return '';
+}
+async function sheetsPullReports(){
+  if(!accessToken) return null;
+  try{
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${encodeURIComponent("'"+REPORTS_TAB+"'")}!A2:N`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if(!res.ok) return null;          // tab missing / no access: skip quietly, never block normal sync
+    const data = await res.json();
+    return (data.values || []).map(r => ({
+      date:(r[0]||'').trim(), team:reportTeamKey(r[1]), opponent:r[2]||'', homeAway:r[3]||'', competition:r[4]||'',
+      goalsFor:r[5]||'', goalsAgainst:r[6]||'', scorers:r[7]||'', potm:r[8]||'',
+      worked:r[9]||'', fix:r[10]||'', focus:r[11]||'', report:r[12]||'', fixtureId:String(r[13]||'').trim()
+    })).filter(x => x.date && x.team);
+  }catch(e){ return null; }
+}
+async function applyMatchReports(){
+  const rows = await sheetsPullReports();
+  if(rows){
+    matchReports = rows;
+    try{ localStorage.setItem(REPORTS_CACHE_KEY, JSON.stringify(rows)); }catch(e){}
+  }
+  return rows ? rows.length : 0;
+}
+// Exact match on Fixture ID when given; otherwise same team + same date + similar opponent (or blank/TBC opponent)
+function reportForFixture(f, team){
+  if(!f || !matchReports.length) return null;
+  const mine = matchReports.filter(r => r.team === team);
+  if(f.ftId){
+    const byId = mine.find(r => r.fixtureId && r.fixtureId === String(f.ftId));
+    if(byId) return byId;
+  }
+  return mine.find(r => !r.fixtureId && r.date === f.date && (feedBlank(f.opponent) || feedSimilar(f.opponent, r.opponent))) || null;
+}
+function matchReportHtml(f, team){
+  const r = reportForFixture(f, team);
+  if(!r) return '';
+  const row = (label, txt) => txt ? `<div class="fixture-meta"><b>${label}:</b> ${escapeHtml(txt)}</div>` : '';
+  const score = (r.goalsFor!=='' && r.goalsAgainst!=='') ? `${escapeHtml(r.goalsFor)}–${escapeHtml(r.goalsAgainst)}` : '';
+  return `<div class="gc-notes" style="white-space:pre-wrap;">`
+    + `<div class="fixture-meta"><b>Match report</b>${score ? ' · '+score : ''}</div>`
+    + (r.report ? `<div style="margin:4px 0 6px;">${escapeHtml(r.report)}</div>` : '')
+    + row('Scorers', r.scorers) + row('Player of the match', r.potm)
+    + row('What worked', r.worked) + row('What to fix', r.fix) + row('Next training focus', r.focus)
+    + `</div>`;
+}
+
 async function afterSignIn(){
   await flushPending();
   const remote = await sheetsPullAll();
@@ -1674,6 +1733,7 @@ async function afterSignIn(){
   migrateLegacyGames();
   seedPredsFixturesIfEmpty();
   await applyFixtureFeed();
+  await applyMatchReports();
   render();
 }
 
@@ -3440,6 +3500,7 @@ function renderFixtures(){
         ${hasResult ? `<div class="fixture-meta">${scorersList ? '<b>Scorers:</b> '+scorersList : ''}${f.potm ? ' · <b>POTW:</b> '+escapeHtml(f.potm) : ''}</div>` : ''}
         ${hasTimerData ? `<div class="fixture-meta">${f.timer.running ? '⏱ Timer running' : (f.timer.finalized ? '⏱ Playing time logged' : '⏱ Timer paused, not finalised')}</div>` : ''}
         ${f.notes ? `<div class="gc-notes">${escapeHtml(f.notes)}</div>` : ''}
+        ${matchReportHtml(f, activeFixtureTeam)}
         <div class="fixture-actions">
           <button class="btn-mini fx-setup" data-id="${f.id}">Setup</button>
           <button class="btn-mini fx-duty" data-id="${f.id}">Coaches</button>
@@ -4654,6 +4715,7 @@ function init(){
   loadSummaryCollapsed();
   migrateLegacyGames();
   seedPredsFixturesIfEmpty();
+  loadMatchReportsCache();
   document.getElementById('sessionDate').value = todayISO();
   document.getElementById('gameDate').value = todayISO();
   render();
@@ -4677,6 +4739,7 @@ document.getElementById('syncDot').onclick = async () => {
     loadLeague(); loadFixtures(); loadPredsPlayers(); loadPredsCoaches();
     migrateLegacyGames();
     seedPredsFixturesIfEmpty();
+    await applyMatchReports();
     render();
     setSyncStatus(pendingSync.size ? 'pending' : 'ok');
     if(pendingSync.size === 0){
