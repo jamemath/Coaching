@@ -1396,6 +1396,7 @@ function todayISO(){ return new Date().toISOString().slice(0,10); }
 // this device's data local-only.
 const GOOGLE_CLIENT_ID = '15452691797-ecp1bs72429ol7nrueqvmjrgr3pv8m4j.apps.googleusercontent.com';
 const SPREADSHEET_ID = '1VFWgZQowXyHJ0MBpWVMLkliyqN-rLjHfA8Ikwk6Scm8';
+let bootLoading = true;   // true while init() seeds empty local storage; seeding must never be queued/pushed over real Sheet data
 const SHEET_TAB = 'Data';      // tab name inside that sheet
 
 const SYNC_KEYS = ['coachlog_drills','coachlog_players','coachlog_coaches','coachlog_sessions','coachlog_games','coachlog_docs','coachlog_league','coachlog_fixtures','coachlog_preds_players','coachlog_preds_coaches'];
@@ -1716,13 +1717,32 @@ function matchReportHtml(f, team){
     + `</div>`;
 }
 
+// Drills are merged on pull: if this device holds custom drills the Sheet doesn't have (and is longer),
+// keep them and push the union back, instead of letting a shorter remote list overwrite them.
+function mergeDrillsOnPull(localRaw, remoteRaw){
+  try{
+    const remote = JSON.parse(remoteRaw), local = JSON.parse(localRaw || '[]');
+    if(!Array.isArray(remote) || !Array.isArray(local) || local.length <= remote.length) return { raw: remoteRaw, extra: false };
+    const have = new Set(remote.map(d => d && d.id));
+    const extras = local.filter(d => d && d.id && !String(d.id).startsWith('seed-') && !have.has(d.id));
+    if(!extras.length) return { raw: remoteRaw, extra: false };
+    return { raw: JSON.stringify(remote.concat(extras)), extra: true };
+  }catch(e){ return { raw: remoteRaw, extra: false }; }
+}
 async function afterSignIn(){
   await flushPending();
   const remote = await sheetsPullAll();
+  let drillsNeedPush = false;
   if(remote){
     SYNC_KEYS.forEach(k=>{
       if(remote[k] !== undefined && remote[k] !== null && remote[k] !== '' && !pendingSync.has(k)){
-        localStorage.setItem(k, remote[k]);
+        if(k === 'coachlog_drills'){
+          const m = mergeDrillsOnPull(localStorage.getItem(k), remote[k]);
+          localStorage.setItem(k, m.raw);
+          if(m.extra) drillsNeedPush = true;
+        } else {
+          localStorage.setItem(k, remote[k]);
+        }
       }
     });
     setSyncStatus(pendingSync.size ? 'pending' : 'ok');
@@ -1730,6 +1750,7 @@ async function afterSignIn(){
     setSyncStatus('error');
   }
   loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs(); loadLeague(); loadFixtures(); loadPredsPlayers(); loadPredsCoaches();
+  if(drillsNeedPush){ persist(); showToast('Kept drills from this device and re-saved them to the Sheet', 6000); }
   migrateLegacyGames();
   seedPredsFixturesIfEmpty();
   await applyFixtureFeed();
@@ -1796,6 +1817,7 @@ function chunkValue(value){
 }
 
 async function pushKey(key, value){
+  if(bootLoading) return;   // starter/seed data on a fresh device is local-only until the Sheet has been pulled
   markPending(key);
   if(!sheetsConfigured() || !accessToken){ return; }
   const chunks = chunkValue(value);
@@ -4718,6 +4740,7 @@ function init(){
   loadMatchReportsCache();
   document.getElementById('sessionDate').value = todayISO();
   document.getElementById('gameDate').value = todayISO();
+  bootLoading = false;
   render();
 }
 document.getElementById('syncDot').onclick = async () => {
@@ -4729,14 +4752,22 @@ document.getElementById('syncDot').onclick = async () => {
   // devices with this device's stale copy.
   await flushPending();
   const remote = await sheetsPullAll();
+  let drillsNeedPush2 = false;
   if(remote){
     SYNC_KEYS.forEach(k=>{
       if(remote[k] !== undefined && remote[k] !== null && remote[k] !== '' && !pendingSync.has(k)){
-        localStorage.setItem(k, remote[k]);
+        if(k === 'coachlog_drills'){
+          const m = mergeDrillsOnPull(localStorage.getItem(k), remote[k]);
+          localStorage.setItem(k, m.raw);
+          if(m.extra) drillsNeedPush2 = true;
+        } else {
+          localStorage.setItem(k, remote[k]);
+        }
       }
     });
     loadDrills(); loadPlayers(); loadCoaches(); loadSessions(); loadGames(); loadDocs();
     loadLeague(); loadFixtures(); loadPredsPlayers(); loadPredsCoaches();
+    if(drillsNeedPush2){ persist(); showToast('Kept drills from this device and re-saved them to the Sheet', 6000); }
     migrateLegacyGames();
     seedPredsFixturesIfEmpty();
     await applyMatchReports();
