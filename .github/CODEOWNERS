@@ -1,0 +1,5 @@
+# Default owner for everything
+*                   @jamemath
+
+# Pipeline changes get extra scrutiny
+/.github/           @jamemath
