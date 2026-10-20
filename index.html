@@ -821,6 +821,12 @@
   <select id="gamePotmSelect"></select>
   <div class="totw-tally" id="gamePotmTallyMini"></div>
 
+  <div id="gameCaptainWrap">
+    <h3>Captain</h3>
+    <select id="gameCaptainSelect"></select>
+    <div class="totw-tally" id="gameCaptainTallyMini"></div>
+  </div>
+
   <h3>Notes</h3>
   <textarea id="gameNotes" placeholder="Match report notes, standout moments…"></textarea>
 
@@ -1263,6 +1269,10 @@ James	1	1	1	1"></textarea>
     <div id="resultScorersList"></div>
     <h3>Player of the Week</h3>
     <select id="fxPotmSelect"></select>
+    <div id="fxCaptainWrap">
+      <h3>Captain</h3>
+      <select id="fxCaptainSelect"></select>
+    </div>
     <h3>Notes</h3>
     <textarea id="fxResultNotes" placeholder="Match report notes, standout moments…"></textarea>
     <div class="sheet-actions u-12">
@@ -1505,6 +1515,8 @@ let squadDraft = [];
 let resultEditFixtureId = null;
 let resultScorersDraft = {};
 let resultPotmDraft = '';
+let resultCaptainDraft = '';
+let currentGameCaptain = '';
 let activeCategory = 'all';
 let searchTerm = '';
 let usedFilter = 'all';
@@ -3054,6 +3066,18 @@ function renderGamesPanel(){
   const counts = roster.map(p => ({p, n: playedFixturesFor(activeGamesTeam).filter(g=>g.potm===p).length})).sort((a,b)=>a.n-b.n || a.p.localeCompare(b.p));
   tallyEl.innerHTML = counts.length ? ('Least awarded so far: ' + counts.slice(0,3).map(c=>`<b>${escapeHtml(c.p)}</b> (${c.n})`).join(', ')) : '';
 
+  // Captain — Meerkats only
+  const capWrap = document.getElementById('gameCaptainWrap');
+  const showCaptain = activeGamesTeam === 'meerkats';
+  capWrap.style.display = showCaptain ? '' : 'none';
+  if(showCaptain){
+    const capSel = document.getElementById('gameCaptainSelect');
+    capSel.innerHTML = `<option value="">— none yet —</option>` + roster.map(p=>`<option value="${escapeAttr(p)}" ${currentGameCaptain===p?'selected':''}>${escapeHtml(p)}</option>`).join('');
+    const capTally = document.getElementById('gameCaptainTallyMini');
+    const capCounts = roster.map(p => ({p, n: playedFixturesFor(activeGamesTeam).filter(g=>g.captain===p).length})).sort((a,b)=>a.n-b.n || a.p.localeCompare(b.p));
+    capTally.innerHTML = capCounts.length ? ('Least captained so far: ' + capCounts.slice(0,3).map(c=>`<b>${escapeHtml(c.p)}</b> (${c.n})`).join(', ')) : '';
+  }
+
   document.getElementById('gameCancelEditBtn').style.display = editingGameId ? 'block' : 'none';
   document.getElementById('saveGameBtn').textContent = editingGameId ? 'Update Game' : 'Save Game';
 
@@ -3063,12 +3087,14 @@ function renderGamesPanel(){
 document.getElementById('gamePlayersAllBtn').onclick = () => { currentGamePlayers = fixtureRoster(activeGamesTeam).slice(); renderGamesPanel(); };
 document.getElementById('gamePlayersNoneBtn').onclick = () => { currentGamePlayers = []; currentGameScorers = {}; renderGamesPanel(); };
 document.getElementById('gamePotmSelect').onchange = (e) => { currentGamePOTM = e.target.value; };
+document.getElementById('gameCaptainSelect').onchange = (e) => { currentGameCaptain = e.target.value; };
 
 function resetGameForm(){
   editingGameId = null;
   currentGamePlayers = [];
   currentGameScorers = {};
   currentGamePOTM = '';
+  currentGameCaptain = '';
   document.getElementById('gameDate').value = todayISO();
   document.getElementById('gameOpponent').value = '';
   document.getElementById('scoreUs').value = 0;
@@ -3102,6 +3128,7 @@ document.getElementById('saveGameBtn').onclick = () => {
     f.squad = currentGamePlayers.slice();
     f.scorers = {...currentGameScorers};
     f.potm = currentGamePOTM || '';
+    if(activeGamesTeam === 'meerkats') f.captain = currentGameCaptain || '';
     f.notes = notes;
     f.played = true;
   } else {
@@ -3113,6 +3140,7 @@ document.getElementById('saveGameBtn').onclick = () => {
       scoreUs, scoreThem, scorers: {...currentGameScorers},
       potm: currentGamePOTM || '', notes, leagueApplied: false
     };
+    if(activeGamesTeam === 'meerkats') f.captain = currentGameCaptain || '';
     list.push(f);
   }
 
@@ -3155,6 +3183,7 @@ function renderGamesList(){
           <div class="gc-row"><b>Played:</b> ${squad.length} — ${escapeHtml(squad.join(', '))}</div>
           <div class="gc-row"><b>Scorers:</b> ${scorersList || '—'}</div>
           <div class="gc-row"><b>Player of the Week:</b> ${g.potm ? escapeHtml(g.potm) : '—'}</div>
+          ${activeGamesTeam === 'meerkats' ? `<div class="gc-row"><b>Captain:</b> ${g.captain ? escapeHtml(g.captain) : '—'}</div>` : ''}
           ${g.notes ? `<div class="gc-notes">${escapeHtml(g.notes)}</div>` : ''}
           <div class="gc-actions" style="margin-top:10px;">
             <button class="gc-edit" data-id="${g.id}" title="Edit">
@@ -3195,6 +3224,7 @@ function openEditGame(id){
   currentGamePlayers = (g.squad||[]).slice();
   currentGameScorers = {...(g.scorers||{})};
   currentGamePOTM = g.potm || '';
+  currentGameCaptain = g.captain || '';
   document.getElementById('gameDate').value = g.date;
   document.getElementById('gameOpponent').value = g.opponent || '';
   document.getElementById('scoreUs').value = g.scoreUs;
@@ -4148,7 +4178,7 @@ function renderFixtures(){
         <div class="fixture-meta"><b>Coaches:</b> ${duty.length ? escapeHtml(duty.join(' & '))+' on duty' : 'duty not set'}${teamCoachesForCard.length ? ' · '+cy+' yes · '+cn+' no' : ''}</div>
         ${roster.length ? `<div class="fixture-meta"><b>Availability:</b> ${ay} yes · ${an} no · ${at} tbc</div>` : ''}
         <div class="fixture-meta"><b>Squad:</b> ${hasSquad ? (f.squad||[]).length+' selected' : 'not set'}</div>
-        ${hasResult ? `<div class="fixture-meta">${scorersList ? '<b>Scorers:</b> '+scorersList : ''}${f.potm ? ' · <b>POTW:</b> '+escapeHtml(f.potm) : ''}</div>` : ''}
+        ${hasResult ? `<div class="fixture-meta">${scorersList ? '<b>Scorers:</b> '+scorersList : ''}${f.potm ? ' · <b>POTW:</b> '+escapeHtml(f.potm) : ''}${(activeFixtureTeam==='meerkats' && f.captain) ? ' · <b>Capt:</b> '+escapeHtml(f.captain) : ''}</div>` : ''}
         ${hasTimerData ? `<div class="fixture-meta">${f.timer.running ? '⏱ Timer running' : (f.timer.finalized ? '⏱ Playing time logged' : '⏱ Timer paused, not finalised')}</div>` : ''}
         ${f.notes ? `<div class="gc-notes">${escapeHtml(f.notes)}</div>` : ''}
         ${matchReportHtml(f, activeFixtureTeam)}
@@ -4310,6 +4340,7 @@ document.getElementById('squadSave').onclick = () => {
     f.squad = squadDraft.slice();
     if(f.scorers){ Object.keys(f.scorers).forEach(n=>{ if(!f.squad.includes(n)) delete f.scorers[n]; }); }
     if(f.potm && !f.squad.includes(f.potm)) f.potm = '';
+    if(f.captain && !f.squad.includes(f.captain)) f.captain = '';
     persistFixtures();
   }
   document.getElementById('squadBackdrop').classList.remove('open');
@@ -4457,6 +4488,7 @@ function openFixtureResult(id){
   document.getElementById('fxResultNotes').value = f.notes || '';
   resultScorersDraft = {...(f.scorers||{})};
   resultPotmDraft = f.potm || '';
+  resultCaptainDraft = f.captain || '';
   renderResultSheet(f);
   document.getElementById('resultBackdrop').classList.add('open');
 }
@@ -4489,6 +4521,16 @@ function renderResultSheet(f){
   const sel = document.getElementById('fxPotmSelect');
   sel.innerHTML = `<option value="">— none yet —</option>` + squad.map(p=>`<option value="${escapeAttr(p)}" ${resultPotmDraft===p?'selected':''}>${escapeHtml(p)}</option>`).join('');
   sel.onchange = (e) => { resultPotmDraft = e.target.value; };
+
+  // Captain — Meerkats only
+  const capWrap = document.getElementById('fxCaptainWrap');
+  const showCaptain = activeFixtureTeam === 'meerkats';
+  capWrap.style.display = showCaptain ? '' : 'none';
+  if(showCaptain){
+    const capSel = document.getElementById('fxCaptainSelect');
+    capSel.innerHTML = `<option value="">— none yet —</option>` + squad.map(p=>`<option value="${escapeAttr(p)}" ${resultCaptainDraft===p?'selected':''}>${escapeHtml(p)}</option>`).join('');
+    capSel.onchange = (e) => { resultCaptainDraft = e.target.value; };
+  }
 }
 document.getElementById('resultCancel').onclick = () => document.getElementById('resultBackdrop').classList.remove('open');
 document.getElementById('resultBackdrop').onclick = (e) => { if(e.target===document.getElementById('resultBackdrop')) document.getElementById('resultBackdrop').classList.remove('open'); };
@@ -4505,6 +4547,7 @@ document.getElementById('resultSave').onclick = () => {
   f.scoreThem = scoreThem;
   f.scorers = {...resultScorersDraft};
   f.potm = resultPotmDraft || '';
+  if(activeFixtureTeam === 'meerkats') f.captain = resultCaptainDraft || '';
   f.notes = notes;
   f.played = true;
 
@@ -5248,6 +5291,22 @@ document.querySelectorAll('#summarySeg button').forEach(b=>{
   };
 });
 
+// "Missed one?" row for the award sections: lists only sessions/games that have no
+// award yet (so nothing already recorded can be overwritten from here).
+function awardAssignHtml(kind, events, emptyMsg){
+  if(!events.length){
+    return `<div class="summary-row"><span class="sr-name" style="color:var(--ink-soft);font-size:12px;">${emptyMsg}</span></div>`;
+  }
+  const what = kind === 'totw' ? 'session' : 'game';
+  return `
+    <div class="award-assign" data-kind="${kind}" style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(0,0,0,.1);">
+      <div class="hint" style="margin-bottom:6px;">Missed one? Pick the ${what} and who it goes to.</div>
+      <select class="aa-event">${events.map(e=>`<option value="${escapeAttr(e.id)}">${escapeHtml(e.label)}</option>`).join('')}</select>
+      <select class="aa-player" style="margin-top:6px;"></select>
+      <button type="button" class="btn btn-primary aa-save" style="margin-top:8px;">Add</button>
+    </div>`;
+}
+
 function renderSummary(){
   document.querySelectorAll('#summarySeg button').forEach(b=>b.classList.toggle('active', b.dataset.val===activeSummaryTeam));
   const wrap = document.getElementById('summaryContent');
@@ -5279,8 +5338,12 @@ function renderSummary(){
 
     html += summarySection('attendance', `Training Attendance (${totalSessions} session${totalSessions===1?'':'s'} logged)`,
       attendance.map(a => `<div class="summary-row"><span class="sr-name">${escapeHtml(a.name)}</span><span class="sr-val">${a.n}/${totalSessions}</span></div>`).join(''));
+    const totwMissing = teamSessions.filter(s=>!s.trainerOfWeek)
+      .sort((a,b)=> b.date.localeCompare(a.date))
+      .map(s => ({ id:s.id, label: (s.title ? s.title + ' — ' : '') + formatDate(s.date) }));
     html += summarySection('totw', 'Trainer of the Week — least awarded first',
-      totw.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join(''));
+      totw.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join('')
+      + awardAssignHtml('totw', totwMissing, 'Every session has a Trainer of the Week'));
     html += summarySection('led', 'Sessions Led',
       led.map(l => `<div class="summary-row"><span class="sr-name">${escapeHtml(l.name)}</span><span class="sr-val">${l.n}/${totalSessions}</span></div>`).join(''));
   }
@@ -5299,8 +5362,23 @@ function renderSummary(){
       appearances.map(a => `<div class="summary-row"><span class="sr-name">${escapeHtml(a.name)}</span><span class="sr-val">${a.n}/${totalGames}</span></div>`).join(''));
     html += summarySection('goals', 'Goalscorers',
       goals.length ? goals.map(g => `<div class="summary-row"><span class="sr-name">${escapeHtml(g.name)}</span><span class="sr-val">${g.n}</span></div>`).join('') : `<div class="summary-row"><span class="sr-name">No goals logged yet</span></div>`);
+    const gameLabel = g => formatDateShort(g.date) + (g.opponent ? ' v ' + g.opponent : '');
+    const potmMissing = playedGames.filter(g=>!g.potm)
+      .sort((a,b)=> b.date.localeCompare(a.date))
+      .map(g => ({ id:g.id, label: gameLabel(g) }));
     html += summarySection('potm', 'Player of the Week — least awarded first',
-      potm.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join(''));
+      potm.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join('')
+      + awardAssignHtml('potm', potmMissing, 'Every game has a Player of the Week'));
+    if(activeSummaryTeam === 'meerkats'){
+      const captains = roster.map(p => ({ name:p, n: playedGames.filter(g=>g.captain===p).length }))
+        .sort((a,b)=> a.n-b.n || a.name.localeCompare(b.name));
+      const captainMissing = playedGames.filter(g=>!g.captain)
+        .sort((a,b)=> b.date.localeCompare(a.date))
+        .map(g => ({ id:g.id, label: gameLabel(g) }));
+      html += summarySection('captain', 'Captain — least often first',
+        captains.map(t => `<div class="summary-row"><span class="sr-name">${escapeHtml(t.name)}</span><span class="sr-val">${t.n}×</span></div>`).join('')
+        + awardAssignHtml('captain', captainMissing, 'Every game has a Captain'));
+    }
   }
 
   if(timeStats.length > 0){
@@ -5335,6 +5413,42 @@ function renderSummary(){
       const key = btn.dataset.key;
       summaryCollapsed[key] = !(summaryCollapsed[key] === undefined ? true : summaryCollapsed[key]);
       persistSummaryCollapsed();
+      renderSummary();
+    };
+  });
+  wrap.querySelectorAll('.award-assign').forEach(box=>{
+    const kind = box.dataset.kind;
+    const evSel = box.querySelector('.aa-event');
+    const plSel = box.querySelector('.aa-player');
+    const playersFor = (id) => {
+      if(kind === 'totw'){
+        const s = teamSessions.find(x=>x.id===id);
+        const att = (s && s.attendance) || [];
+        return att.length ? att : roster;
+      }
+      const g = playedGames.find(x=>x.id===id);
+      const sq = (g && g.squad) || [];
+      return sq.length ? sq : roster;
+    };
+    const fillPlayers = () => {
+      plSel.innerHTML = `<option value="">— choose player —</option>` + playersFor(evSel.value).map(p=>`<option value="${escapeAttr(p)}">${escapeHtml(p)}</option>`).join('');
+    };
+    evSel.onchange = fillPlayers;
+    fillPlayers();
+    box.querySelector('.aa-save').onclick = () => {
+      if(!evSel.value || !plSel.value){ showToast('Pick a ' + (kind==='totw' ? 'session' : 'game') + ' and a player'); return; }
+      if(kind === 'totw'){
+        const s = teamSessions.find(x=>x.id===evSel.value);
+        if(!s) return;
+        s.trainerOfWeek = plSel.value;
+        persistSessions();
+      } else {
+        const g = playedGames.find(x=>x.id===evSel.value);
+        if(!g) return;
+        if(kind === 'potm') g.potm = plSel.value; else g.captain = plSel.value;
+        persistFixtures();
+      }
+      showToast('Added');
       renderSummary();
     };
   });
